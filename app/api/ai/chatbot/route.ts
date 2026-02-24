@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
-import { db } from "@/lib/db";
+import { auth } from "@/auth";
+import { connectDB } from "@/lib/db";
+import { Stream } from "@/lib/models/stream";
+import { ChatMessage } from "@/lib/models/chatMessage";
 import { generateBotResponse } from "@/lib/ai/chatbot";
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -19,18 +21,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Get stream info
-    const stream = await db.stream.findUnique({
-      where: { id: streamId },
-      include: {
-        chatMessages: {
-          where: { isFlagged: false },
-          orderBy: { createdAt: "desc" },
-          take: 20,
-          include: { user: true },
-        },
-      },
-    });
+    await connectDB();
+
+    const stream = await Stream.findById(streamId).lean<any>();
 
     if (!stream) {
       return NextResponse.json(
@@ -39,8 +32,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const recentMessages = stream.chatMessages.reverse().map((m) => ({
-      username: m.user?.username || (m.isBot ? "AI Bot" : "Anonymous"),
+    const recentChatMessages = await ChatMessage.find({
+      streamId,
+      isFlagged: false,
+    })
+      .populate("userId", "username")
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean<any[]>();
+
+    const recentMessages = recentChatMessages.reverse().map((m) => ({
+      username: m.userId?.username || (m.isBot ? "AI Bot" : "Anonymous"),
       content: m.content,
     }));
 
@@ -52,12 +54,10 @@ export async function POST(req: NextRequest) {
     );
 
     // Save bot response
-    const saved = await db.chatMessage.create({
-      data: {
-        content: botResponse,
-        streamId,
-        isBot: true,
-      },
+    const saved = await ChatMessage.create({
+      content: botResponse,
+      streamId,
+      isBot: true,
     });
 
     return NextResponse.json({

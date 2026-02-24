@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
-import { db } from "@/lib/db";
+import { auth } from "@/auth";
+import { connectDB } from "@/lib/db";
+import { User } from "@/lib/models/user";
+import { Stream } from "@/lib/models/stream";
+import { ChatMessage } from "@/lib/models/chatMessage";
 import { moderateMessage } from "@/lib/ai/moderate";
 import { shouldBotRespond, generateBotResponse } from "@/lib/ai/chatbot";
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -27,31 +30,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find the user in our DB
-    const dbUser = await db.user.findUnique({
-      where: { clerkId: user.id },
-    });
+    await connectDB();
+
+    const dbUser = await User.findById(session.user.id);
 
     // Moderate the message
     const moderation = await moderateMessage(content);
 
     if (!moderation.allowed) {
-      // Save flagged message for review
       if (dbUser) {
-        await db.chatMessage.create({
-          data: {
-            content,
-            streamId,
-            userId: dbUser.id,
-            isFlagged: true,
-          },
+        await ChatMessage.create({
+          content,
+          streamId,
+          userId: dbUser._id,
+          isFlagged: true,
         });
       }
 
       return NextResponse.json(
         {
-          error:
-            moderation.message || "Message flagged by AI moderation",
+          error: moderation.message || "Message flagged by AI moderation",
           flagged: true,
           categories: moderation.categories,
         },
@@ -60,12 +58,10 @@ export async function POST(req: NextRequest) {
     }
 
     // Save message
-    const message = await db.chatMessage.create({
-      data: {
-        content,
-        streamId,
-        userId: dbUser?.id,
-      },
+    const message = await ChatMessage.create({
+      content,
+      streamId,
+      userId: dbUser?._id,
     });
 
     // Check if bot should respond (non-blocking)
@@ -84,38 +80,33 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleBotResponse(streamId: string, triggerMessage: string) {
-  const stream = await db.stream.findUnique({
-    where: { id: streamId },
-    include: {
-      chatMessages: {
-        where: { isFlagged: false },
-        orderBy: { createdAt: "desc" },
-        take: 20,
-        include: { user: true },
-      },
-    },
-  });
-
+  const stream = await Stream.findById(streamId).lean<any>();
   if (!stream) return;
 
-  const recentMessages = stream.chatMessages.reverse().map((m) => ({
-    username: m.user?.username || "Anonymous",
+  const recentMessages = await ChatMessage.find({
+    streamId,
+    isFlagged: false,
+  })
+    .populate("userId", "username")
+    .sort({ createdAt: -1 })
+    .limit(20)
+    .lean<any[]>();
+
+  const messages = recentMessages.reverse().map((m) => ({
+    username: m.userId?.username || "Anonymous",
     content: m.content,
   }));
 
   const botResponse = await generateBotResponse(
     stream.title,
     stream.description || "",
-    recentMessages,
+    messages,
     triggerMessage
   );
 
-  // Save bot message to DB
-  await db.chatMessage.create({
-    data: {
-      content: botResponse,
-      streamId,
-      isBot: true,
-    },
+  await ChatMessage.create({
+    content: botResponse,
+    streamId,
+    isBot: true,
   });
 }

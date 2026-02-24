@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { WebhookReceiver } from "livekit-server-sdk";
-import { db } from "@/lib/db";
+import { connectDB } from "@/lib/db";
+import { Stream } from "@/lib/models/stream";
 
 const receiver = new WebhookReceiver(
   process.env.LIVEKIT_API_KEY!,
@@ -18,12 +19,14 @@ export async function POST(req: NextRequest) {
 
     const event = await receiver.receive(body, authorization);
 
+    await connectDB();
+
     if (event.event === "room_started") {
       const roomName = event.room?.name;
       if (roomName) {
-        await db.stream.updateMany({
-          where: { id: roomName },
-          data: { isLive: true, startedAt: new Date() },
+        await Stream.findByIdAndUpdate(roomName, {
+          isLive: true,
+          startedAt: new Date(),
         });
       }
     }
@@ -31,54 +34,60 @@ export async function POST(req: NextRequest) {
     if (event.event === "room_finished") {
       const roomName = event.room?.name;
       if (roomName) {
-        await db.stream.updateMany({
-          where: { id: roomName },
-          data: { isLive: false, endedAt: new Date(), viewerCount: 0 },
+        await Stream.findByIdAndUpdate(roomName, {
+          isLive: false,
+          endedAt: new Date(),
+          viewerCount: 0,
         });
 
         // Trigger summary generation
         try {
           const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-          fetch(`${appUrl}/api/ai/summarize`, {
+          await fetch(`${appUrl}/api/ai/summarize`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ streamId: roomName }),
           });
-        } catch {
-          // Non-blocking: summary generation failure shouldn't affect webhook
+        } catch (summaryErr) {
+          console.error("Summary generation failed (non-fatal):", summaryErr);
         }
       }
     }
 
     if (event.event === "participant_joined") {
       const roomName = event.room?.name;
+      const participantIdentity = event.participant?.identity;
       if (roomName) {
-        await db.stream.updateMany({
-          where: { id: roomName },
-          data: {
-            viewerCount: { increment: 1 },
-          },
-        });
-        // Update peak viewers
-        const stream = await db.stream.findFirst({ where: { id: roomName } });
-        if (stream && stream.viewerCount > stream.peakViewers) {
-          await db.stream.update({
-            where: { id: roomName },
-            data: { peakViewers: stream.viewerCount },
-          });
+        // Fetch stream to get streamer identity so we don't count the streamer as a viewer
+        const stream = await Stream.findById(roomName);
+        if (stream && participantIdentity === stream.userId.toString()) {
+          // This is the streamer joining — skip viewer count increment
+        } else if (stream) {
+          const updated = await Stream.findByIdAndUpdate(
+            roomName,
+            { $inc: { viewerCount: 1 } },
+            { new: true }
+          );
+          if (updated && updated.viewerCount > updated.peakViewers) {
+            await Stream.findByIdAndUpdate(roomName, {
+              peakViewers: updated.viewerCount,
+            });
+          }
         }
       }
     }
 
     if (event.event === "participant_left") {
       const roomName = event.room?.name;
+      const participantIdentity = event.participant?.identity;
       if (roomName) {
-        await db.stream.updateMany({
-          where: { id: roomName },
-          data: {
-            viewerCount: { decrement: 1 },
-          },
-        });
+        const stream = await Stream.findById(roomName);
+        if (stream && participantIdentity !== stream.userId.toString()) {
+          // Prevent going below 0
+          await Stream.findByIdAndUpdate(roomName, [
+            { $set: { viewerCount: { $max: [0, { $subtract: ["$viewerCount", 1] }] } } },
+          ]);
+        }
       }
     }
 

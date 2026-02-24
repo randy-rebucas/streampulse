@@ -7,6 +7,7 @@ import {
   Radio,
   BarChart3,
   Settings,
+  Youtube,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,11 @@ const navItems = [
     label: "Analytics",
     href: "/dashboard/analytics",
     icon: BarChart3,
+  },
+  {
+    label: "Watch Party",
+    href: "/dashboard/watch-party",
+    icon: Youtube,
   },
   {
     label: "Settings",

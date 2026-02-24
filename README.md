@@ -2,7 +2,7 @@
 
 Live streaming platform with AI-powered chat moderation, intelligent chatbot assistant, and automatic stream summaries.
 
-Built with Next.js 16, LiveKit, Vercel AI SDK, Clerk, and Prisma.
+Built with Next.js 16, LiveKit, Vercel AI SDK, NextAuth.js, and Mongoose.
 
 ## Features
 
@@ -11,7 +11,7 @@ Built with Next.js 16, LiveKit, Vercel AI SDK, Clerk, and Prisma.
 - **AI Chat Moderation** - Every message is screened by OpenAI's Moderation API before broadcast
 - **AI Chatbot** - Mention `@bot` in chat to get contextual responses powered by GPT-4o-mini
 - **AI Stream Summaries** - Auto-generated summaries with key topics, highlights, and sentiment analysis when a stream ends
-- **Authentication** - Sign up / sign in with Clerk (OAuth, email, MFA support)
+- **Authentication** - Sign up / sign in with NextAuth.js (GitHub, Google OAuth, email/password)
 - **Creator Dashboard** - Go live, view analytics, and manage stream settings
 - **Stream Discovery** - Browse live streams on the home page with viewer counts and tags
 
@@ -23,8 +23,8 @@ Built with Next.js 16, LiveKit, Vercel AI SDK, Clerk, and Prisma.
 | Streaming | LiveKit (WebRTC SFU) |
 | Real-Time Chat | LiveKit Data Channels |
 | AI | Vercel AI SDK + OpenAI (GPT-4o-mini, Moderation API) |
-| Auth | Clerk |
-| Database | Prisma + PostgreSQL (Neon) |
+| Auth | NextAuth.js v5 |
+| Database | MongoDB + Mongoose |
 | UI | Tailwind CSS 4 + Lucide Icons |
 | State | Zustand |
 
@@ -34,7 +34,7 @@ Built with Next.js 16, LiveKit, Vercel AI SDK, Clerk, and Prisma.
 streampulse/
 ├── app/
 │   ├── page.tsx                          # Home page (browse live streams)
-│   ├── layout.tsx                        # Root layout (Clerk + dark theme)
+│   ├── layout.tsx                        # Root layout (NextAuth + dark theme)
 │   ├── (auth)/                           # Sign in / sign up pages
 │   ├── (dashboard)/                      # Creator dashboard
 │   │   ├── page.tsx                      # Dashboard home
@@ -51,14 +51,21 @@ streampulse/
 │       ├── ai/summarize/route.ts         # Generate stream summary
 │       ├── streams/route.ts              # List / create streams
 │       ├── streams/[streamId]/route.ts   # Get stream details
-│       └── webhooks/clerk/route.ts       # Clerk user sync webhook
+│       └── api/auth/[...nextauth]/route.ts  # NextAuth route handler
+│       └── api/auth/register/route.ts    # Email/password registration
 ├── components/
 │   ├── stream/                           # Video player, controls, cards
 │   ├── chat/                             # Chat panel, messages, input
 │   ├── dashboard/                        # Sidebar, summary cards
 │   └── layout/                           # Navbar
 ├── lib/
-│   ├── db.ts                             # Prisma client singleton
+│   ├── db.ts                             # Mongoose connection
+│   ├── mongoClient.ts                    # MongoClient for NextAuth adapter
+│   ├── models/                           # Mongoose models
+│   │   ├── user.ts
+│   │   ├── stream.ts
+│   │   ├── chatMessage.ts
+│   │   └── streamSummary.ts
 │   ├── livekit.ts                        # Token generation helpers
 │   ├── ai/moderate.ts                    # OpenAI moderation
 │   ├── ai/chatbot.ts                     # Chatbot logic
@@ -67,8 +74,6 @@ streampulse/
 │   └── constants.ts                      # App constants
 ├── stores/
 │   └── chat-store.ts                     # Zustand chat state
-└── prisma/
-    └── schema.prisma                     # Database schema
 ```
 
 ## Getting Started
@@ -77,7 +82,7 @@ streampulse/
 
 - Node.js 20+
 - pnpm
-- PostgreSQL database (recommend [Neon](https://neon.tech) free tier)
+- MongoDB database (recommend [MongoDB Atlas](https://www.mongodb.com/atlas) free tier)
 
 ### 1. Install dependencies
 
@@ -97,18 +102,12 @@ You will need:
 
 | Service | Where to get keys |
 |---|---|
-| **Clerk** | [dashboard.clerk.com](https://dashboard.clerk.com) |
+| **NextAuth.js** | [authjs.dev](https://authjs.dev) |
 | **LiveKit** | [livekit.io](https://livekit.io) (free Cloud tier or self-host) |
-| **Neon PostgreSQL** | [neon.tech](https://neon.tech) |
+| **MongoDB Atlas** | [mongodb.com/atlas](https://www.mongodb.com/atlas) |
 | **OpenAI** | [platform.openai.com](https://platform.openai.com) |
 
-### 3. Push the database schema
-
-```bash
-pnpm db:push
-```
-
-### 4. Start the development server
+### 3. Start the development server
 
 ```bash
 pnpm dev
@@ -147,8 +146,6 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 | `pnpm build` | Build for production |
 | `pnpm start` | Start production server |
 | `pnpm lint` | Run ESLint |
-| `pnpm db:push` | Push Prisma schema to database |
-| `pnpm db:studio` | Open Prisma Studio (database GUI) |
 
 ## Deployment
 
@@ -163,9 +160,11 @@ Open [http://localhost:3000](http://localhost:3000) to see the app.
 
 ## Database Schema
 
-Four models:
+Four Mongoose models in `lib/models/`:
 
-- **User** - Synced from Clerk, stores profile + stream key
+- **User** - Synced from NextAuth, stores profile + stream key
 - **Stream** - Stream metadata, live status, viewer counts
 - **ChatMessage** - All chat messages with moderation flags
 - **StreamSummary** - AI-generated summaries linked to streams
+
+No migrations needed — MongoDB creates collections automatically on first write.

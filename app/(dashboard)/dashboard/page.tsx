@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "next-auth/react";
 import { Radio, Users, MessageSquare, BarChart3 } from "lucide-react";
 import Link from "next/link";
 
@@ -12,7 +12,7 @@ interface StreamStats {
 }
 
 export default function DashboardPage() {
-  const { user } = useUser();
+  const { data: session } = useSession();
   const [stats, setStats] = useState<StreamStats>({
     totalStreams: 0,
     totalViewers: 0,
@@ -23,7 +23,7 @@ export default function DashboardPage() {
     <div className="mx-auto max-w-4xl">
       <div className="mb-8">
         <h1 className="text-2xl font-bold">
-          Welcome back, {user?.firstName || "Streamer"}
+          Welcome back, {session?.user?.name || "Streamer"}
         </h1>
         <p className="text-muted-foreground">
           Manage your streams and view analytics

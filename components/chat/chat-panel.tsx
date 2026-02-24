@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "next-auth/react";
 import { useRoomContext } from "@livekit/components-react";
 import { DataPacket_Kind, RoomEvent } from "livekit-client";
 import { MessageSquare } from "lucide-react";
@@ -14,7 +14,8 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ streamId }: ChatPanelProps) {
-  const { user, isSignedIn } = useUser();
+  const { data: session } = useSession();
+  const isSignedIn = !!session;
   const { messages, addMessage, setConnected } = useChatStore();
   const scrollRef = useRef<HTMLDivElement>(null);
   const room = useRoomContext();
@@ -95,7 +96,7 @@ export function ChatPanel({ streamId }: ChatPanelProps) {
   // Send a message
   const handleSend = useCallback(
     async (content: string): Promise<{ error?: string }> => {
-      if (!room || !isSignedIn || !user) {
+      if (!room || !isSignedIn || !session?.user) {
         return { error: "You must be signed in to chat" };
       }
 
@@ -118,8 +119,8 @@ export function ChatPanel({ streamId }: ChatPanelProps) {
           type: "chat",
           id: data.messageId,
           content,
-          username: user.username || user.firstName || "User",
-          avatarUrl: user.imageUrl,
+          username: session.user.name ?? session.user.email ?? "User",
+          avatarUrl: session.user.image,
           isBot: false,
           createdAt: Date.now(),
         });
@@ -135,7 +136,7 @@ export function ChatPanel({ streamId }: ChatPanelProps) {
         return { error: "Failed to send message" };
       }
     },
-    [room, isSignedIn, user, streamId]
+    [room, isSignedIn, session, streamId]
   );
 
   return (

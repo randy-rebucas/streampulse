@@ -1,39 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
-import { db } from "@/lib/db";
-import { generateStreamKey } from "@/lib/utils";
+import { auth } from "@/auth";
+import { connectDB } from "@/lib/db";
+import { User } from "@/lib/models/user";
+import { Stream } from "@/lib/models/stream";
 
 export async function GET(req: NextRequest) {
   try {
+    const session = await auth();
     const search = req.nextUrl.searchParams.get("search") || "";
     const liveOnly = req.nextUrl.searchParams.get("live") === "true";
+    const userId = req.nextUrl.searchParams.get("userId") || "";
 
-    const streams = await db.stream.findMany({
-      where: {
-        ...(liveOnly ? { isLive: true } : {}),
-        ...(search
-          ? {
-              OR: [
-                { title: { contains: search, mode: "insensitive" } },
-                { tags: { hasSome: [search] } },
-              ],
-            }
-          : {}),
-      },
-      include: {
-        user: {
-          select: {
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
-        },
-      },
-      orderBy: [{ isLive: "desc" }, { viewerCount: "desc" }, { createdAt: "desc" }],
-      take: 50,
-    });
+    // Restrict userId filter to authenticated user's own ID only
+    if (userId && (!session?.user?.id || session.user.id !== userId)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-    return NextResponse.json({ streams });
+    await connectDB();
+
+    const filter: Record<string, any> = {};
+    if (liveOnly) filter.isLive = true;
+    if (userId) filter.userId = userId;
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: "i" } },
+        { tags: { $in: [search] } },
+      ];
+    }
+
+    const streams = await Stream.find(filter)
+      .populate("userId", "username name image")
+      .sort({ isLive: -1, viewerCount: -1, createdAt: -1 })
+      .limit(50)
+      .lean<any[]>();
+
+    const formatted = streams.map((s) => ({
+      ...s,
+      id: s._id.toString(),
+      user: s.userId
+        ? {
+            username: (s.userId as any).username,
+            name: (s.userId as any).name,
+            image: (s.userId as any).image,
+          }
+        : null,
+    }));
+
+    return NextResponse.json({ streams: formatted });
   } catch (error) {
     console.error("Streams list error:", error);
     return NextResponse.json(
@@ -45,8 +58,8 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -59,34 +72,21 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Find or create user in DB
-    let dbUser = await db.user.findUnique({
-      where: { clerkId: user.id },
-    });
+    await connectDB();
 
+    const dbUser = await User.findById(session.user.id);
     if (!dbUser) {
-      dbUser = await db.user.create({
-        data: {
-          clerkId: user.id,
-          username: user.username || user.id,
-          displayName: user.firstName || user.username || "User",
-          avatarUrl: user.imageUrl,
-          isStreamer: true,
-          streamKey: generateStreamKey(),
-        },
-      });
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    const stream = await db.stream.create({
-      data: {
-        title,
-        description,
-        tags: tags || [],
-        userId: dbUser.id,
-      },
+    const stream = await Stream.create({
+      title,
+      description,
+      tags: tags || [],
+      userId: dbUser._id,
     });
 
-    return NextResponse.json({ stream });
+    return NextResponse.json({ stream: { ...stream.toObject(), id: stream.id } });
   } catch (error) {
     console.error("Stream create error:", error);
     return NextResponse.json(

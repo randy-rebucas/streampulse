@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { connectDB } from "@/lib/db";
+import { Stream } from "@/lib/models/stream";
+import { ChatMessage } from "@/lib/models/chatMessage";
+import { StreamSummary } from "@/lib/models/streamSummary";
 import { generateStreamSummary } from "@/lib/ai/summarize";
 
 export async function POST(req: NextRequest) {
@@ -13,16 +16,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const stream = await db.stream.findUnique({
-      where: { id: streamId },
-      include: {
-        chatMessages: {
-          where: { isFlagged: false },
-          orderBy: { createdAt: "asc" },
-          include: { user: true },
-        },
-      },
-    });
+    await connectDB();
+
+    const stream = await Stream.findById(streamId).lean<any>();
 
     if (!stream) {
       return NextResponse.json(
@@ -31,7 +27,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (stream.chatMessages.length < 5) {
+    const chatMessages = await ChatMessage.find({ streamId, isFlagged: false })
+      .populate("userId", "username")
+      .sort({ createdAt: 1 })
+      .lean<any[]>();
+
+    if (chatMessages.length < 5) {
       return NextResponse.json(
         { error: "Not enough chat messages to generate a summary" },
         { status: 400 }
@@ -45,9 +46,9 @@ export async function POST(req: NextRequest) {
       (endTime.getTime() - startTime.getTime()) / 60000
     );
 
-    const chatMessages = stream.chatMessages.map((m) => ({
+    const messages = chatMessages.map((m) => ({
       content: m.content,
-      username: m.user?.username || (m.isBot ? "AI Bot" : "Anonymous"),
+      username: m.userId?.username || (m.isBot ? "AI Bot" : "Anonymous"),
       createdAt: m.createdAt,
       isBot: m.isBot,
     }));
@@ -55,31 +56,26 @@ export async function POST(req: NextRequest) {
     const summary = await generateStreamSummary(
       stream.title,
       stream.description || "",
-      chatMessages,
+      messages,
       durationMinutes
     );
 
     // Save or update summary
-    const saved = await db.streamSummary.upsert({
-      where: { streamId },
-      create: {
-        streamId,
-        title: summary.title,
-        tldr: summary.tldr,
-        keyTopics: summary.keyTopics,
-        highlights: summary.highlights as any,
-        sentiment: summary.sentiment,
+    const saved = await StreamSummary.findOneAndUpdate(
+      { streamId },
+      {
+        $set: {
+          title: summary.title,
+          tldr: summary.tldr,
+          keyTopics: summary.keyTopics,
+          highlights: summary.highlights,
+          sentiment: summary.sentiment,
+        },
       },
-      update: {
-        title: summary.title,
-        tldr: summary.tldr,
-        keyTopics: summary.keyTopics,
-        highlights: summary.highlights as any,
-        sentiment: summary.sentiment,
-      },
-    });
+      { upsert: true, new: true }
+    );
 
-    return NextResponse.json({ summary: saved });
+    return NextResponse.json({ summary: { ...saved.toObject(), id: saved.id } });
   } catch (error) {
     console.error("Summarize error:", error);
     return NextResponse.json(

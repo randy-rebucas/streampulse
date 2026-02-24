@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { useRoomContext } from "@livekit/components-react";
-import { Track } from "livekit-client";
+import { useRoomContext, useConnectionState } from "@livekit/components-react";
+import { ConnectionState } from "livekit-client";
 import {
   Mic,
   MicOff,
@@ -10,6 +10,7 @@ import {
   VideoOff,
   MonitorUp,
   PhoneOff,
+  Loader2,
 } from "lucide-react";
 
 interface StreamControlsProps {
@@ -18,24 +19,47 @@ interface StreamControlsProps {
 
 export function StreamControls({ onEndStream }: StreamControlsProps) {
   const room = useRoomContext();
-  const [isMicOn, setIsMicOn] = useState(true);
-  const [isCameraOn, setIsCameraOn] = useState(true);
+  const connectionState = useConnectionState();
+  const isConnected = connectionState === ConnectionState.Connected;
+  const [isMicOn, setIsMicOn] = useState(false);
+  const [isCameraOn, setIsCameraOn] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   const toggleMic = async () => {
-    await room.localParticipant.setMicrophoneEnabled(!isMicOn);
-    setIsMicOn(!isMicOn);
+    try {
+      await room.localParticipant.setMicrophoneEnabled(!isMicOn);
+      setIsMicOn(!isMicOn);
+    } catch (e) {
+      console.error("Failed to toggle mic:", e);
+    }
   };
 
   const toggleCamera = async () => {
-    await room.localParticipant.setCameraEnabled(!isCameraOn);
-    setIsCameraOn(!isCameraOn);
+    try {
+      await room.localParticipant.setCameraEnabled(!isCameraOn);
+      setIsCameraOn(!isCameraOn);
+    } catch (e) {
+      console.error("Failed to toggle camera:", e);
+    }
   };
 
   const toggleScreenShare = async () => {
-    await room.localParticipant.setScreenShareEnabled(!isScreenSharing);
-    setIsScreenSharing(!isScreenSharing);
+    try {
+      await room.localParticipant.setScreenShareEnabled(!isScreenSharing);
+      setIsScreenSharing(!isScreenSharing);
+    } catch (e) {
+      console.error("Failed to toggle screen share:", e);
+    }
   };
+
+  if (!isConnected) {
+    return (
+      <div className="flex items-center justify-center gap-2 rounded-xl bg-card border border-border p-3">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+        <span className="text-sm text-muted-foreground">Connecting...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center gap-3 rounded-xl bg-card border border-border p-3">

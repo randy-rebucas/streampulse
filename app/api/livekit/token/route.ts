@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
+import { auth } from "@/auth";
 import { createViewerToken, createStreamerToken } from "@/lib/livekit";
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user) {
+    const session = await auth();
+    if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
@@ -18,8 +18,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const identity = user.id;
-    const name = user.username || user.firstName || "User";
+    const identity = session.user.id;
+    const name = session.user.name ?? session.user.email ?? "User";
 
     const token = isStreamer
       ? await createStreamerToken(roomName, identity, name)

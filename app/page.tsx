@@ -14,8 +14,8 @@ interface Stream {
   thumbnailUrl: string | null;
   user: {
     username: string;
-    displayName: string;
-    avatarUrl: string | null;
+    name: string | null;
+    image: string | null;
   };
 }
 
@@ -118,8 +118,8 @@ export default function HomePage() {
                 key={stream.id}
                 id={stream.id}
                 title={stream.title}
-                streamerName={stream.user.displayName || stream.user.username}
-                streamerAvatar={stream.user.avatarUrl || undefined}
+                streamerName={stream.user.name || stream.user.username}
+                streamerAvatar={stream.user.image || undefined}
                 viewerCount={stream.viewerCount}
                 tags={stream.tags}
                 isLive={stream.isLive}

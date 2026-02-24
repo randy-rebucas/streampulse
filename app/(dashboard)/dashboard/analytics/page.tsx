@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useUser } from "@clerk/nextjs";
+import { useSession } from "next-auth/react";
 import {
   BarChart3,
   Radio,
@@ -41,7 +41,7 @@ interface StreamWithSummary {
 }
 
 export default function AnalyticsPage() {
-  const { user } = useUser();
+  const { data: session } = useSession();
   const [streams, setStreams] = useState<StreamWithSummary[]>([]);
   const [loading, setLoading] = useState(true);
 

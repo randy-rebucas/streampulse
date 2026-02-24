@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
+import { connectDB } from "@/lib/db";
+import { ChatMessage } from "@/lib/models/chatMessage";
 import { CHAT_HISTORY_LIMIT } from "@/lib/constants";
 
 export async function GET(req: NextRequest) {
@@ -13,30 +14,20 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    const messages = await db.chatMessage.findMany({
-      where: {
-        streamId,
-        isFlagged: false,
-      },
-      include: {
-        user: {
-          select: {
-            username: true,
-            displayName: true,
-            avatarUrl: true,
-          },
-        },
-      },
-      orderBy: { createdAt: "asc" },
-      take: CHAT_HISTORY_LIMIT,
-    });
+    await connectDB();
+
+    const messages = await ChatMessage.find({ streamId, isFlagged: false })
+      .populate("userId", "username name image")
+      .sort({ createdAt: 1 })
+      .limit(CHAT_HISTORY_LIMIT)
+      .lean<any[]>();
 
     return NextResponse.json({
       messages: messages.map((m) => ({
-        id: m.id,
+        id: m._id.toString(),
         content: m.content,
-        username: m.user?.displayName || m.user?.username || "Anonymous",
-        avatarUrl: m.user?.avatarUrl,
+        username: m.userId?.name || m.userId?.username || "Anonymous",
+        avatarUrl: m.userId?.image,
         isBot: m.isBot,
         isFlagged: m.isFlagged,
         createdAt: m.createdAt,
