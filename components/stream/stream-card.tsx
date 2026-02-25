@@ -1,8 +1,17 @@
 "use client";
 
+import { useRef, useState, useCallback, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Users, Radio } from "lucide-react";
+import Hls from "hls.js";
 import { formatViewerCount } from "@/lib/utils";
+
+function getHlsUrl(streamId: string) {
+  const ws = process.env.NEXT_PUBLIC_LIVEKIT_WS_URL ?? "";
+  const http = ws.replace(/^wss?:\/\//, "https://");
+  return `${http}/hls/${streamId}/index.m3u8`;
+}
 
 interface StreamCardProps {
   id: string;
@@ -27,21 +36,130 @@ export function StreamCard({
   isLive,
   thumbnailUrl,
 }: StreamCardProps) {
+  const router = useRouter();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const [videoActive, setVideoActive] = useState(false);
+  const [liveThumbnail, setLiveThumbnail] = useState<string | null>(null);
+
+  // Silently capture first HLS frame as a static thumbnail for live streams
+  useEffect(() => {
+    if (!isLive || thumbnailUrl) return;
+    const src = getHlsUrl(id);
+    const video = document.createElement("video");
+    video.muted = true;
+    video.playsInline = true;
+    video.crossOrigin = "anonymous";
+    let hls: Hls | null = null;
+    let done = false;
+
+    const capture = () => {
+      if (done) return;
+      done = true;
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth || 640;
+        canvas.height = video.videoHeight || 360;
+        const ctx = canvas.getContext("2d");
+        if (ctx && video.videoWidth > 0) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          setLiveThumbnail(canvas.toDataURL("image/jpeg", 0.75));
+        }
+      } catch {
+        // tainted canvas (CORS) — silently skip
+      }
+      video.pause();
+      hls?.destroy();
+    };
+
+    video.addEventListener("timeupdate", capture, { once: true });
+
+    if (Hls.isSupported()) {
+      hls = new Hls({ lowLatencyMode: true, startLevel: 0, maxBufferLength: 2 });
+      hls.loadSource(src);
+      hls.attachMedia(video);
+      hls.once(Hls.Events.MANIFEST_PARSED, () => { video.play().catch(() => {}); });
+      hls.on(Hls.Events.ERROR, (_e, data) => { if (data.fatal) { done = true; hls?.destroy(); } });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = src;
+      video.play().catch(() => {});
+    }
+
+    return () => { done = true; hls?.destroy(); video.pause(); };
+  }, [id, isLive, thumbnailUrl]);
+
+  const displayThumbnail = thumbnailUrl || liveThumbnail;
+
+  const startPreview = useCallback(() => {
+    if (!isLive) return;
+    const video = videoRef.current;
+    if (!video) return;
+    const src = getHlsUrl(id);
+    if (Hls.isSupported()) {
+      const hls = new Hls({ lowLatencyMode: true, startLevel: -1 });
+      hlsRef.current = hls;
+      hls.loadSource(src);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        video.play().catch(() => {});
+        setVideoActive(true);
+      });
+      hls.on(Hls.Events.ERROR, (_e, data) => {
+        if (data.fatal) { hls.destroy(); hlsRef.current = null; }
+      });
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = src;
+      video.play().catch(() => {});
+      setVideoActive(true);
+    }
+  }, [id, isLive]);
+
+  const stopPreview = useCallback(() => {
+    hlsRef.current?.destroy();
+    hlsRef.current = null;
+    const video = videoRef.current;
+    if (video) { video.pause(); video.removeAttribute("src"); video.load(); }
+    setVideoActive(false);
+  }, []);
+
   return (
-    <Link href={`/watch/${id}`} className="group block">
+    <div
+      className="group block cursor-pointer"
+      onClick={() => router.push(`/watch/${id}`)}
+      onMouseEnter={startPreview}
+      onMouseLeave={stopPreview}
+    >
       <div className="overflow-hidden rounded-xl border border-border bg-card transition-all hover:border-primary/50 hover:shadow-lg hover:shadow-primary/5">
-        {/* Thumbnail */}
+        {/* Thumbnail / Video preview */}
         <div className="relative aspect-video bg-secondary">
-          {thumbnailUrl ? (
+          {displayThumbnail ? (
             <img
-              src={thumbnailUrl}
+              src={displayThumbnail}
               alt={title}
-              className="h-full w-full object-cover"
+              className={`h-full w-full object-cover transition-opacity duration-300 ${
+                videoActive ? "opacity-0" : "opacity-100"
+              }`}
             />
           ) : (
-            <div className="flex h-full items-center justify-center">
+            <div
+              className={`flex h-full items-center justify-center transition-opacity duration-300 ${
+                videoActive ? "opacity-0" : "opacity-100"
+              }`}
+            >
               <Radio className="h-12 w-12 text-muted-foreground/30" />
             </div>
+          )}
+
+          {/* Live HLS preview video */}
+          {isLive && (
+            <video
+              ref={videoRef}
+              muted
+              playsInline
+              className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-300 ${
+                videoActive ? "opacity-100" : "opacity-0"
+              }`}
+            />
           )}
 
           {/* Live badge */}
@@ -121,6 +239,6 @@ export function StreamCard({
           </div>
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
