@@ -5,7 +5,6 @@ import bcrypt from "bcryptjs";
 import clientPromise from "@/lib/mongoClient";
 import { connectDB } from "@/lib/db";
 import { User } from "@/lib/models/user";
-import { generateStreamKey } from "@/lib/utils";
 import { authConfig } from "@/auth.config";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
@@ -37,23 +36,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
-  events: {
-    async createUser({ user }) {
-      await connectDB();
-      const streamKey = generateStreamKey();
-      const username = user.email?.split("@")[0] ?? user.id;
-      // Retry up to 4 times to handle write-race with the MongoDB adapter
-      for (let attempt = 0; attempt < 4; attempt++) {
-        const updated = await User.findByIdAndUpdate(user.id, {
-          $set: { streamKey, username },
-        });
-        if (updated) break;
-        await new Promise((r) => setTimeout(r, 300 * (attempt + 1)));
-      }
-    },
-  },
   providers: [
-    ...authConfig.providers,
     CredentialsProvider({
       name: "credentials",
       credentials: {

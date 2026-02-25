@@ -73,7 +73,7 @@ export async function PATCH(
     }
 
     const body = await req.json();
-    const allowed = ["isLive", "title", "description", "tags", "endedAt", "watchPartyQueue", "watchPartyQueueIndex"];
+    const allowed = ["isLive", "title", "description", "tags", "endedAt", "watchPartyQueue", "watchPartyQueueIndex", "viewerCount"];
     const update: Record<string, any> = {};
     for (const key of allowed) {
       if (key in body) update[key] = body[key];
@@ -84,7 +84,26 @@ export async function PATCH(
       update.endedAt = new Date();
     }
 
-    const updated = await Stream.findByIdAndUpdate(streamId, update, { new: true }).lean<any>();
+    // Track peak viewers
+    if (typeof body.viewerCount === "number") {
+      if (body.viewerCount > (stream.peakViewers ?? 0)) {
+        update.peakViewers = body.viewerCount;
+      }
+    }
+
+    const mongoUpdate: Record<string, any> = { $set: update };
+
+    // Push a viewer history snapshot when updating count while live
+    if (typeof body.viewerCount === "number" && stream.isLive) {
+      mongoUpdate.$push = {
+        viewerHistory: {
+          $each: [{ t: new Date(), count: body.viewerCount }],
+          $slice: -720, // keep last 720 snapshots (~2 hrs at 10s interval)
+        },
+      };
+    }
+
+    const updated = await Stream.findByIdAndUpdate(streamId, mongoUpdate, { new: true }).lean<any>();
     return NextResponse.json({ stream: { ...updated, id: updated._id.toString() } });
   } catch (error) {
     console.error("Stream update error:", error);

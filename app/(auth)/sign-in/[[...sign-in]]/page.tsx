@@ -4,7 +4,7 @@ import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Radio, Github, Mail, Loader2 } from "lucide-react";
+import { Radio, Loader2 } from "lucide-react";
 
 export default function SignInPage() {
   const router = useRouter();
@@ -33,10 +33,6 @@ export default function SignInPage() {
     }
   };
 
-  const handleOAuth = (provider: "github" | "google") => {
-    signIn(provider, { callbackUrl });
-  };
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
       <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-8 shadow-lg">
@@ -44,33 +40,6 @@ export default function SignInPage() {
         <div className="mb-6 flex flex-col items-center gap-2">
           <Radio className="h-8 w-8 text-primary" />
           <h1 className="text-xl font-bold">Sign in to StreamPulse</h1>
-        </div>
-
-        {/* OAuth buttons */}
-        <div className="flex flex-col gap-3 mb-6">
-          <button
-            onClick={() => handleOAuth("github")}
-            className="flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm font-medium hover:bg-secondary/80 transition-colors"
-          >
-            <Github className="h-4 w-4" />
-            Continue with GitHub
-          </button>
-          <button
-            onClick={() => handleOAuth("google")}
-            className="flex items-center justify-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm font-medium hover:bg-secondary/80 transition-colors"
-          >
-            <Mail className="h-4 w-4" />
-            Continue with Google
-          </button>
-        </div>
-
-        <div className="relative mb-6">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-border" />
-          </div>
-          <div className="relative flex justify-center text-xs text-muted-foreground">
-            <span className="bg-card px-2">or</span>
-          </div>
         </div>
 
         {/* Credentials form */}

@@ -12,6 +12,7 @@ import {
   TrendingUp,
   ThumbsUp,
   Loader2,
+  Activity,
 } from "lucide-react";
 import { StreamSummaryCard } from "@/components/dashboard/stream-summary-card";
 
@@ -24,6 +25,7 @@ interface StreamWithSummary {
   startedAt: string | null;
   endedAt: string | null;
   tags: string[];
+  viewerHistory: Array<{ t: string; count: number }>;
   summary: {
     title: string;
     tldr: string;
@@ -38,6 +40,52 @@ interface StreamWithSummary {
   _count: {
     chatMessages: number;
   };
+}
+
+/** Minimal SVG polyline chart for viewer count over time */
+function ViewerHistoryChart({ data }: { data: Array<{ t: string; count: number }> }) {
+  if (data.length < 2) return null;
+  const W = 320;
+  const H = 64;
+  const pad = 4;
+  const maxV = Math.max(...data.map((d) => d.count), 1);
+  const points = data
+    .map((d, i) => {
+      const x = pad + ((W - pad * 2) * i) / (data.length - 1);
+      const y = H - pad - ((H - pad * 2) * d.count) / maxV;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(" ");
+
+  return (
+    <div className="px-4 pb-3">
+      <p className="mb-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+        <Activity className="h-3 w-3" />
+        Viewer history
+      </p>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full overflow-visible rounded"
+        style={{ height: 64 }}
+      >
+        {/* Area fill */}
+        <polygon
+          points={`${pad},${H - pad} ${points} ${W - pad},${H - pad}`}
+          fill="rgba(139,92,246,0.12)"
+        />
+        {/* Line */}
+        <polyline points={points} fill="none" stroke="#8b5cf6" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        {/* Peak dot */}
+        {(() => {
+          const peak = data.reduce((a, b) => (b.count > a.count ? b : a), data[0]);
+          const idx = data.indexOf(peak);
+          const x = pad + ((W - pad * 2) * idx) / (data.length - 1);
+          const y = H - pad - ((H - pad * 2) * peak.count) / maxV;
+          return <circle cx={x} cy={y} r={3} fill="#8b5cf6" />;
+        })()}
+      </svg>
+    </div>
+  );
 }
 
 export default function AnalyticsPage() {
@@ -139,6 +187,13 @@ export default function AnalyticsPage() {
                       {tag}
                     </span>
                   ))}
+                </div>
+              )}
+
+              {/* Viewer history chart */}
+              {stream.viewerHistory?.length > 1 && (
+                <div className="border-b border-border">
+                  <ViewerHistoryChart data={stream.viewerHistory} />
                 </div>
               )}
 

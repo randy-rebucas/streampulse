@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
 import { ChatMessage } from "@/lib/models/chatMessage";
+import { Stream } from "@/lib/models/stream";
+import { User } from "@/lib/models/user";
 import { CHAT_HISTORY_LIMIT } from "@/lib/constants";
 
 export async function GET(req: NextRequest) {
@@ -22,7 +24,19 @@ export async function GET(req: NextRequest) {
       .limit(CHAT_HISTORY_LIMIT)
       .lean<any[]>();
 
+    // Get streamer's pinned message (only if streamId is a valid ObjectId)
+    let pinnedMessage = "";
+    const isObjectId = /^[a-f\d]{24}$/i.test(streamId);
+    if (isObjectId) {
+      const stream = await Stream.findById(streamId).select("userId").lean<any>();
+      if (stream?.userId) {
+        const streamer = await User.findById(stream.userId).select("pinnedMessage").lean<any>();
+        pinnedMessage = streamer?.pinnedMessage ?? "";
+      }
+    }
+
     return NextResponse.json({
+      pinnedMessage,
       messages: messages.map((m) => ({
         id: m._id.toString(),
         content: m.content,

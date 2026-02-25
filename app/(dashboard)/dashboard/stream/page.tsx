@@ -23,6 +23,9 @@ import {
   Plus,
   Trash2,
   ListVideo,
+  UserPlus,
+  Calendar,
+  Trash,
 } from "lucide-react";
 import { StreamControls } from "@/components/stream/stream-controls";
 import { STREAM_TAGS } from "@/lib/constants";
@@ -317,8 +320,69 @@ export default function StreamPage() {
   const [youtubeStreamKey, setYoutubeStreamKey] = useState("");
   const [egressId, setEgressId] = useState<string | null>(null);
   const [youtubeStatus, setYoutubeStatus] = useState<"idle" | "starting" | "live" | "error">("idle");
+  const [guestLink, setGuestLink] = useState<string | null>(null);
+  const [guestCopied, setGuestCopied] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
+
+  // Scheduled streams
+  const [schedTitle, setSchedTitle] = useState("");
+  const [schedDesc, setSchedDesc] = useState("");
+  const [schedTags, setSchedTags] = useState<string[]>([]);
+  const [schedAt, setSchedAt] = useState("");
+  const [schedSaving, setSchedSaving] = useState(false);
+  const [schedules, setSchedules] = useState<Array<{id: string; title: string; scheduledAt: string; tags: string[]}>>([]);
 
   const watchUrl = typeof window !== "undefined" ? `${window.location.origin}/watch/${streamId}` : ``;
+
+  useEffect(() => {
+    if (!session?.user?.id) return;
+    fetch("/api/streams/schedule")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (d) setSchedules(d.schedules ?? []); })
+      .catch(() => {});
+  }, [session?.user?.id]);
+
+  const handleGuestInvite = useCallback(async () => {
+    if (!streamId) return;
+    setGuestLoading(true);
+    try {
+      const res = await fetch("/api/livekit/guest-token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setGuestLink(data.guestLink);
+      }
+    } finally {
+      setGuestLoading(false);
+    }
+  }, [streamId]);
+
+  const handleCreateSchedule = async () => {
+    if (!schedTitle || !schedAt) return;
+    setSchedSaving(true);
+    try {
+      const res = await fetch("/api/streams/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: schedTitle, description: schedDesc, tags: schedTags, scheduledAt: schedAt }),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setSchedules((prev) => [...prev, d.schedule]);
+        setSchedTitle(""); setSchedDesc(""); setSchedTags([]); setSchedAt("");
+      }
+    } finally {
+      setSchedSaving(false);
+    }
+  };
+
+  const handleDeleteSchedule = async (id: string) => {
+    await fetch(`/api/streams/schedule?id=${id}`, { method: "DELETE" });
+    setSchedules((prev) => prev.filter((s) => s.id !== id));
+  };
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -482,6 +546,37 @@ export default function StreamPage() {
 
           {/* Watch Party */}
           <YouTubePartyControls streamId={streamId} />
+
+          {/* Guest Co-Streamer Invite */}
+          <div className="rounded-xl border border-border bg-card p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <UserPlus className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Invite Co-Streamer</span>
+            </div>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Generate a guest link that lets someone join your stream as a co-host (camera + mic, no room admin).
+            </p>
+            {guestLink ? (
+              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-secondary px-3 py-2">
+                <code className="flex-1 truncate text-xs text-primary">{guestLink}</code>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(guestLink); setGuestCopied(true); setTimeout(() => setGuestCopied(false), 2000); }}
+                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  {guestCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={handleGuestInvite}
+                disabled={guestLoading}
+                className="flex items-center gap-2 rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50"
+              >
+                {guestLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                Generate Guest Link
+              </button>
+            )}
+          </div>
         </LiveKitRoom>
 
         <div className="mt-4 rounded-xl border border-border bg-card p-4">
@@ -656,6 +751,65 @@ export default function StreamPage() {
           )}
           {isLoading ? "Starting stream..." : "Go Live"}
         </button>
+
+        {/* Scheduled Streams */}
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+            <Calendar className="h-4 w-4 text-primary" />
+            Schedule a Stream
+          </h3>
+          <div className="mb-3 flex flex-col gap-3">
+            <input
+              type="text"
+              value={schedTitle}
+              onChange={(e) => setSchedTitle(e.target.value)}
+              placeholder="Stream title"
+              className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <input
+              type="datetime-local"
+              value={schedAt}
+              onChange={(e) => setSchedAt(e.target.value)}
+              className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {STREAM_TAGS.slice(0, 8).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setSchedTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t])}
+                  className={`rounded-full px-2.5 py-1 text-xs transition-colors ${schedTags.includes(t) ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={handleCreateSchedule}
+              disabled={!schedTitle || !schedAt || schedSaving}
+              className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+            >
+              {schedSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              Add to Schedule
+            </button>
+          </div>
+
+          {schedules.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Upcoming</p>
+              {schedules.map((s) => (
+                <div key={s.id} className="flex items-center gap-3 rounded-lg border border-border bg-secondary px-3 py-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm font-medium">{s.title}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(s.scheduledAt).toLocaleString()}</p>
+                  </div>
+                  <button onClick={() => handleDeleteSchedule(s.id)} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors">
+                    <Trash className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

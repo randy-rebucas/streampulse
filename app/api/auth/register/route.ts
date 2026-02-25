@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { connectDB } from "@/lib/db";
 import { User } from "@/lib/models/user";
 import { generateStreamKey } from "@/lib/utils";
+import { getSiteSettings } from "@/lib/models/siteSettings";
 
 export async function POST(req: NextRequest) {
   try {
@@ -48,6 +49,18 @@ export async function POST(req: NextRequest) {
     }
 
     await connectDB();
+
+    // Check registration setting — always allow if no users exist yet (bootstrap)
+    const userCount = await User.countDocuments();
+    if (userCount > 0) {
+      const settings = await getSiteSettings();
+      if (!settings.registrationEnabled) {
+        return NextResponse.json(
+          { error: "Registration is currently disabled." },
+          { status: 403 }
+        );
+      }
+    }
 
     const existing = await User.findOne({ email: trimmedEmail });
     if (existing) {

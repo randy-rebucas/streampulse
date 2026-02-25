@@ -1,5 +1,10 @@
 import mongoose, { Document, Model, Schema, Types } from "mongoose";
 
+export interface IViewerSnapshot {
+  t: Date;
+  count: number;
+}
+
 export interface IStream extends Document {
   title: string;
   description?: string;
@@ -13,6 +18,8 @@ export interface IStream extends Document {
   userId: Types.ObjectId;
   watchPartyQueue?: string[];
   watchPartyQueueIndex?: number;
+  /** Periodic viewer-count snapshots for the analytics chart */
+  viewerHistory: IViewerSnapshot[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -31,6 +38,12 @@ const StreamSchema = new Schema<IStream>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, index: true },
     watchPartyQueue: { type: [String], default: [] },
     watchPartyQueueIndex: { type: Number, default: 0 },
+    viewerHistory: [
+      {
+        t: { type: Date },
+        count: { type: Number },
+      },
+    ],
   },
   {
     timestamps: true,

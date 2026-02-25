@@ -7,6 +7,7 @@ import {
   ThumbsUp,
   AlertCircle,
   Minus,
+  Download,
 } from "lucide-react";
 
 interface StreamSummaryCardProps {
@@ -57,20 +58,38 @@ export function StreamSummaryCard({ summary }: StreamSummaryCardProps) {
     sentimentConfig.neutral;
   const SentimentIcon = sentiment.icon;
 
+  const handlePrint = () => {
+    const el = document.getElementById("stream-summary-print");
+    if (!el) return;
+    const original = document.body.innerHTML;
+    document.body.innerHTML = el.outerHTML;
+    window.print();
+    document.body.innerHTML = original;
+    window.location.reload();
+  };
+
   return (
-    <div className="p-4 space-y-4">
+    <div id="stream-summary-print" className="p-4 space-y-4 stream-summary-print">
       {/* Header */}
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-primary" />
         <h4 className="text-sm font-semibold text-primary">AI Summary</h4>
         <div
-          className={`ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 ${sentiment.bg}`}
+          className={`flex items-center gap-1 rounded-full px-2 py-0.5 ${sentiment.bg}`}
         >
           <SentimentIcon className={`h-3 w-3 ${sentiment.color}`} />
           <span className={`text-[10px] font-medium ${sentiment.color}`}>
             {sentiment.label}
           </span>
         </div>
+        <button
+          onClick={handlePrint}
+          className="no-print ml-auto flex items-center gap-1 rounded-lg bg-secondary px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          title="Export as PDF"
+        >
+          <Download className="h-3 w-3" />
+          PDF
+        </button>
       </div>
 
       {/* TLDR */}

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { LiveKitRoom } from "@livekit/components-react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { Loader2, AlertCircle, UserPlus, UserCheck } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { StreamPlayer } from "@/components/stream/stream-player";
 import { StreamInfo } from "@/components/stream/stream-info";
@@ -41,9 +41,14 @@ export default function WatchPage({
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isFollowing, setIsFollowing] = useState(false);
+  const [followerCount, setFollowerCount] = useState(0);
+  const [followLoading, setFollowLoading] = useState(false);
   const setYoutubeVideoId = useChatStore((s) => s.setYoutubeVideoId);
   const setYoutubeQueue = useChatStore((s) => s.setYoutubeQueue);
   const youtubeVideoId = useChatStore((s) => s.youtubeVideoId);
+  const reactions = useChatStore((s) => s.reactions);
+  const removeReaction = useChatStore((s) => s.removeReaction);
 
   useEffect(() => {
     async function loadStream() {
@@ -56,6 +61,16 @@ export default function WatchPage({
 
         const data = await res.json();
         setStream(data.stream);
+
+        // Load follow status
+        if (isSignedIn) {
+          fetch(`/api/follow/${data.stream.user.username}`)
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => {
+              if (d) { setIsFollowing(d.isFollowing); setFollowerCount(d.followerCount); }
+            })
+            .catch(() => {});
+        }
 
         // Seed watch party state for late joiners
         if (data.stream.watchPartyQueue?.length) {
@@ -87,6 +102,21 @@ export default function WatchPage({
     loadStream();
   }, [streamId, isSignedIn, setYoutubeVideoId]);
 
+  const handleFollow = useCallback(async () => {
+    if (!stream || !session) return;
+    setFollowLoading(true);
+    try {
+      const res = await fetch(`/api/follow/${stream.user.username}`, { method: "POST" });
+      if (res.ok) {
+        const d = await res.json();
+        setIsFollowing(d.following);
+        setFollowerCount(d.followerCount);
+      }
+    } finally {
+      setFollowLoading(false);
+    }
+  }, [stream, session]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -114,13 +144,14 @@ export default function WatchPage({
   }
 
   const serverUrl = process.env.NEXT_PUBLIC_LIVEKIT_WS_URL || "";
+  const isStreamer = !!session && (session.user as any)?.id === stream.user.id;
 
   // Main content area — shared between authenticated and unauthenticated views
   const mainContent = (
     <div className="flex flex-1 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-5xl p-4">
-        {/* Video player — YouTube watch party takes over the player when active */}
-        <div className="aspect-video overflow-hidden rounded-xl bg-black">
+        {/* Video player — with reactions overlay */}
+        <div className="relative aspect-video overflow-hidden rounded-xl bg-black">
           {youtubeVideoId ? (
             <YouTubeQueuePlayer />
           ) : token && stream.isLive ? (
@@ -132,6 +163,18 @@ export default function WatchPage({
               </p>
             </div>
           )}
+
+          {/* Floating reaction particles */}
+          {reactions.map((r) => (
+            <span
+              key={r.id}
+              className="pointer-events-none absolute bottom-8 text-3xl animate-reaction-float"
+              style={{ left: `${r.x}%` }}
+              onAnimationEnd={() => removeReaction(r.id)}
+            >
+              {r.emoji}
+            </span>
+          ))}
         </div>
 
         <StreamInfo
@@ -143,6 +186,34 @@ export default function WatchPage({
           isLive={stream.isLive}
         />
 
+        {/* Follow button row */}
+        {isSignedIn && !isStreamer && (
+          <div className="mt-1 flex items-center gap-3 px-4 pb-2">
+            <button
+              onClick={handleFollow}
+              disabled={followLoading}
+              className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
+                isFollowing
+                  ? "bg-secondary text-foreground hover:bg-secondary/80"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              }`}
+            >
+              {followLoading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : isFollowing ? (
+                <UserCheck className="h-3.5 w-3.5" />
+              ) : (
+                <UserPlus className="h-3.5 w-3.5" />
+              )}
+              {isFollowing ? "Following" : "Follow"}
+            </button>
+            {followerCount > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {followerCount.toLocaleString()} followers
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -167,7 +238,7 @@ export default function WatchPage({
 
             {/* Chat sidebar — always in DOM for data channel; visually hidden on mobile */}
             <div className="hidden w-80 shrink-0 border-l border-border lg:block">
-              <ChatPanel streamId={streamId} />
+              <ChatPanel streamId={streamId} isStreamer={isStreamer} />
             </div>
           </LiveKitRoom>
         ) : (

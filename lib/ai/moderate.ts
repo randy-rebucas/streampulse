@@ -10,7 +10,9 @@ export interface ModerationResult {
 }
 
 export async function moderateMessage(
-  content: string
+  content: string,
+  /** 0–1 score threshold above which a category is considered flagged. Default 0.5 */
+  threshold = 0.5
 ): Promise<ModerationResult> {
   try {
     const moderation = await openai.moderations.create({
@@ -20,32 +22,23 @@ export async function moderateMessage(
 
     const result = moderation.results[0];
 
-    if (result.flagged) {
-      const flaggedCategories = Object.entries(result.categories)
-        .filter(([, flagged]) => flagged)
-        .map(([category]) => category);
+    // Use category_scores so we can apply the custom threshold
+    const flaggedCategories = Object.entries(result.category_scores ?? {})
+      .filter(([, score]) => (score as number) >= threshold)
+      .map(([category]) => category);
 
+    if (result.flagged || flaggedCategories.length > 0) {
       return {
         allowed: false,
         flagged: true,
         categories: flaggedCategories,
-        message:
-          "Your message was flagged for inappropriate content and was not sent.",
+        message: "Your message was flagged for inappropriate content and was not sent.",
       };
     }
 
-    return {
-      allowed: true,
-      flagged: false,
-      categories: [],
-    };
+    return { allowed: true, flagged: false, categories: [] };
   } catch (error) {
     console.error("Moderation API error:", error);
-    // Allow message through if moderation fails (fail-open)
-    return {
-      allowed: true,
-      flagged: false,
-      categories: [],
-    };
+    return { allowed: true, flagged: false, categories: [] };
   }
 }

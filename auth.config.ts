@@ -1,10 +1,8 @@
 import type { NextAuthConfig } from "next-auth";
-import GitHubProvider from "next-auth/providers/github";
-import GoogleProvider from "next-auth/providers/google";
 
 /**
  * Edge-compatible auth config — no Node.js modules (no bcrypt, no mongoose).
- * Used by middleware.ts which runs in the Edge runtime.
+ * Used by proxy.ts which runs in the Edge runtime.
  * auth.ts extends this with the MongoDB adapter, Credentials provider, and DB callbacks.
  */
 export const authConfig = {
@@ -29,14 +27,5 @@ export const authConfig = {
       return session;
     },
   },
-  providers: [
-    GitHubProvider({
-      clientId: process.env.GITHUB_CLIENT_ID!,
-      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
-    }),
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-  ],
+  providers: [],
 } satisfies NextAuthConfig;

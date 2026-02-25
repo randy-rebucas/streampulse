@@ -83,3 +83,30 @@ body {
 .animate-pulse-live {
   animation: pulse-live 2s ease-in-out infinite;
 }
+
+/* Floating emoji reaction animation */
+@keyframes reaction-float {
+  0% {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-160px) scale(1.4);
+    opacity: 0;
+  }
+}
+
+.animate-reaction-float {
+  animation: reaction-float 2s ease-out forwards;
+  pointer-events: none;
+}
+
+/* PDF / print export for stream summaries */
+@media print {
+  body > * { display: none !important; }
+  .stream-summary-print { display: block !important; }
+  .no-print { display: none !important; }
+}

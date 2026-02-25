@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Radio, Sparkles, Shield, Bot, TrendingUp } from "lucide-react";
+import { Radio, Sparkles, Shield, Bot, TrendingUp, Users, BarChart3, Smile } from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { StreamCard } from "@/components/stream/stream-card";
 
@@ -60,7 +60,7 @@ export default function HomePage() {
             </h1>
             <p className="mt-4 max-w-2xl text-lg text-muted-foreground">
               The live streaming platform with AI-powered chat moderation,
-              intelligent chatbot assistant, and automatic stream summaries.
+              emoji reactions, live polls, follow system, and automatic stream summaries.
             </p>
 
             {/* Feature pills */}
@@ -76,6 +76,18 @@ export default function HomePage() {
               <div className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-2">
                 <TrendingUp className="h-4 w-4 text-accent" />
                 <span className="text-sm">Stream Summaries</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-2">
+                <Smile className="h-4 w-4 text-yellow-400" />
+                <span className="text-sm">Live Reactions</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-2">
+                <BarChart3 className="h-4 w-4 text-blue-400" />
+                <span className="text-sm">Live Polls</span>
+              </div>
+              <div className="flex items-center gap-2 rounded-lg bg-card border border-border px-4 py-2">
+                <Users className="h-4 w-4 text-pink-400" />
+                <span className="text-sm">Follow Streamers</span>
               </div>
             </div>
           </div>

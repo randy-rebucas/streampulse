@@ -59,6 +59,29 @@ export async function createStreamerToken(
   return await token.toJwt();
 }
 
+/** Guest co-streamer — can publish audio/video but cannot manage the room */
+export async function createGuestStreamerToken(
+  roomName: string,
+  identity: string,
+  name: string
+) {
+  const token = new AccessToken(
+    process.env.LIVEKIT_API_KEY,
+    process.env.LIVEKIT_API_SECRET,
+    { identity, name, ttl: "6h" }
+  );
+
+  token.addGrant({
+    room: roomName,
+    roomJoin: true,
+    canPublish: true,
+    canPublishData: true,
+    canSubscribe: true,
+  });
+
+  return await token.toJwt();
+}
+
 export async function startYouTubeEgress(roomName: string, youtubeStreamKey: string) {
   const client = new EgressClient(
     `https://${getLivekitHost()}`,
