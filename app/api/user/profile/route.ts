@@ -16,8 +16,16 @@ export async function PATCH(req: NextRequest) {
       return NextResponse.json({ error: "Name is required." }, { status: 400 });
     }
 
+    const trimmed = name.trim();
+    if (trimmed.length < 2) {
+      return NextResponse.json({ error: "Name must be at least 2 characters." }, { status: 400 });
+    }
+    if (trimmed.length > 64) {
+      return NextResponse.json({ error: "Name must be under 64 characters." }, { status: 400 });
+    }
+
     await connectDB();
-    await User.findByIdAndUpdate(session.user.id, { name });
+    await User.findByIdAndUpdate(session.user.id, { name: trimmed });
 
     return NextResponse.json({ success: true });
   } catch (error) {

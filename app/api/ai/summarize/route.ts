@@ -5,11 +5,30 @@ import { ChatMessage } from "@/lib/models/chatMessage";
 import { StreamSummary } from "@/lib/models/streamSummary";
 import { generateStreamSummary } from "@/lib/ai/summarize";
 
+// Internal-only secret so the webhook can trigger summarization
+// without exposing the full auth session flow.
+const INTERNAL_SECRET = process.env.INTERNAL_SECRET;
+
 export async function POST(req: NextRequest) {
   try {
+    // Allow requests from the webhook (same-origin with internal secret)
+    // OR directly authenticated users (for future on-demand use).
+    const internalToken = req.headers.get("x-internal-secret");
+    const isTrustedInternal =
+      INTERNAL_SECRET && internalToken === INTERNAL_SECRET;
+
+    // Reject unauthenticated external calls
+    if (!isTrustedInternal) {
+      const origin = req.headers.get("origin");
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+      if (!appUrl || origin !== appUrl) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    }
+
     const { streamId } = await req.json();
 
-    if (!streamId) {
+    if (!streamId || !/^[a-f\d]{24}$/i.test(streamId)) {
       return NextResponse.json(
         { error: "streamId is required" },
         { status: 400 }

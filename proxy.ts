@@ -9,7 +9,11 @@ export default auth((req) => {
 
   if (isProtectedRoute && !req.auth) {
     const signInUrl = new URL("/sign-in", req.url);
-    signInUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);
+    // Only pass same-origin paths as callbackUrl to prevent open-redirect
+    const pathname = req.nextUrl.pathname;
+    if (pathname.startsWith("/") && !pathname.startsWith("//")) {
+      signInUrl.searchParams.set("callbackUrl", pathname);
+    }
     return NextResponse.redirect(signInUrl);
   }
 });

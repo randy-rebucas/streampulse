@@ -21,6 +21,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (!/^[a-f\d]{24}$/i.test(streamId)) {
+      return NextResponse.json({ error: "Stream not found" }, { status: 404 });
+    }
+
+    if (typeof message !== "string" || message.length > 500) {
+      return NextResponse.json({ error: "Message too long" }, { status: 400 });
+    }
+
     await connectDB();
 
     const stream = await Stream.findById(streamId).lean<any>();

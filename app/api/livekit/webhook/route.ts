@@ -45,7 +45,10 @@ export async function POST(req: NextRequest) {
           const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
           await fetch(`${appUrl}/api/ai/summarize`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "x-internal-secret": process.env.INTERNAL_SECRET ?? "",
+            },
             body: JSON.stringify({ streamId: roomName }),
           });
         } catch (summaryErr) {

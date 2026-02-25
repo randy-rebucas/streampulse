@@ -27,10 +27,13 @@ export function formatTimeAgo(date: Date): string {
 }
 
 export function generateStreamKey(): string {
+  // Use crypto.getRandomValues (available in both Node.js 15+ and Edge runtime)
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
   let result = "sk_";
-  for (let i = 0; i < 32; i++) {
-    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (const byte of bytes) {
+    result += chars[byte % chars.length];
   }
   return result;
 }

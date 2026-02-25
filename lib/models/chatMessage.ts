@@ -5,7 +5,7 @@ export interface IChatMessage extends Document {
   isBot: boolean;
   isFlagged: boolean;
   userId?: Types.ObjectId;
-  streamId: Types.ObjectId;
+  streamId: string;
   createdAt: Date;
 }
 
@@ -15,7 +15,7 @@ const ChatMessageSchema = new Schema<IChatMessage>(
     isBot: { type: Boolean, default: false },
     isFlagged: { type: Boolean, default: false },
     userId: { type: Schema.Types.ObjectId, ref: "User" },
-    streamId: { type: Schema.Types.ObjectId, ref: "Stream", required: true, index: true },
+    streamId: { type: String, required: true, index: true },
   },
   {
     timestamps: { createdAt: true, updatedAt: false },

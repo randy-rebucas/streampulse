@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useSession, signIn, signOut } from "next-auth/react";
 import { Radio, Search, LayoutDashboard, LogOut, User } from "lucide-react";
 
@@ -10,7 +11,7 @@ export function Navbar() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4">
+      <div className="flex h-14 w-full items-center justify-between px-4">
         {/* Logo */}
         <Link href="/" className="flex items-center gap-2">
           <Radio className="h-6 w-6 text-primary" />
@@ -42,10 +43,11 @@ export function Navbar() {
               </Link>
               <div className="flex items-center gap-2">
                 {session.user?.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                  <Image
                     src={session.user.image}
                     alt={session.user.name ?? "User"}
+                    width={32}
+                    height={32}
                     className="h-8 w-8 rounded-full object-cover"
                   />
                 ) : (

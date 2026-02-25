@@ -80,7 +80,9 @@ export async function POST(req: NextRequest) {
 }
 
 async function handleBotResponse(streamId: string, triggerMessage: string) {
-  const stream = await Stream.findById(streamId).lean<any>();
+  // Only query Stream for real ObjectId-shaped stream IDs
+  const isObjectId = /^[a-f\d]{24}$/i.test(streamId);
+  const stream = isObjectId ? await Stream.findById(streamId).lean<any>() : null;
   if (!stream) return;
 
   const recentMessages = await ChatMessage.find({

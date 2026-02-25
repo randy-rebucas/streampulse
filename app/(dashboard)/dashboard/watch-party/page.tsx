@@ -13,6 +13,11 @@ import {
   ListVideo,
   Save,
   GripVertical,
+  Play,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  Eye,
 } from "lucide-react";
 
 function extractYouTubeId(input: string): string | null {
@@ -36,6 +41,12 @@ export default function WatchPartyDashboardPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // Preview player state
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [quickPlayInput, setQuickPlayInput] = useState("");
+  const [quickPlayError, setQuickPlayError] = useState(false);
 
   const username = (session?.user as any)?.username;
   const partyUrl = username ? `/watch-party/${username}` : null;
@@ -90,6 +101,39 @@ export default function WatchPartyDashboardPage() {
     navigator.clipboard.writeText(`${window.location.origin}${partyUrl}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handlePreviewVideo = (id: string, index: number) => {
+    setPreviewId(id);
+    setPreviewIndex(index);
+  };
+
+  const handlePreviewClose = () => {
+    setPreviewId(null);
+    setPreviewIndex(null);
+  };
+
+  const handlePreviewPrev = () => {
+    if (previewIndex === null || queue.length === 0) return;
+    const next = (previewIndex - 1 + queue.length) % queue.length;
+    setPreviewIndex(next);
+    setPreviewId(queue[next]);
+  };
+
+  const handlePreviewNext = () => {
+    if (previewIndex === null || queue.length === 0) return;
+    const next = (previewIndex + 1) % queue.length;
+    setPreviewIndex(next);
+    setPreviewId(queue[next]);
+  };
+
+  const handleQuickPlay = () => {
+    const id = extractYouTubeId(quickPlayInput.trim());
+    if (!id) { setQuickPlayError(true); return; }
+    setQuickPlayError(false);
+    setPreviewId(id);
+    setPreviewIndex(null); // standalone quick play, not tied to queue position
+    setQuickPlayInput("");
   };
 
   return (
@@ -181,6 +225,13 @@ export default function WatchPartyDashboardPage() {
                     </a>
                   </div>
                   <button
+                    onClick={() => handlePreviewVideo(id, i)}
+                    className="shrink-0 rounded p-1 text-muted-foreground hover:text-primary transition-colors"
+                    title="Preview"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </button>
+                  <button
                     onClick={() => handleRemove(i)}
                     className="shrink-0 rounded p-1 text-muted-foreground hover:text-destructive transition-colors"
                     title="Remove"
@@ -212,6 +263,122 @@ export default function WatchPartyDashboardPage() {
               {saving ? "Saving..." : saved ? "Saved!" : "Save Queue"}
             </button>
           </div>
+        </div>
+
+        {/* ── Inline Player ───────────────────────────── */}
+        <div className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-1 flex items-center gap-2 text-base font-semibold">
+            <Play className="h-4 w-4 text-primary" />
+            Play a Video
+          </h2>
+          <p className="mb-4 text-xs text-muted-foreground">
+            Preview any queued video or paste a new URL to play it instantly.
+          </p>
+
+          {/* Quick-play bar */}
+          <div className="mb-4 flex gap-2">
+            <input
+              type="text"
+              value={quickPlayInput}
+              onChange={(e) => { setQuickPlayInput(e.target.value); setQuickPlayError(false); }}
+              onKeyDown={(e) => e.key === "Enter" && handleQuickPlay()}
+              placeholder="Paste a YouTube URL or video ID…"
+              className="flex-1 rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            />
+            <button
+              onClick={handleQuickPlay}
+              disabled={!quickPlayInput.trim()}
+              className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Play className="h-4 w-4" />
+              Play
+            </button>
+          </div>
+          {quickPlayError && (
+            <p className="-mt-2 mb-3 text-xs text-destructive">
+              Couldn&apos;t find a video ID. Try a URL like{" "}
+              <code>youtube.com/watch?v=dQw4w9WgXcQ</code>.
+            </p>
+          )}
+
+          {previewId ? (
+            <div>
+              {/* Player */}
+              <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-black shadow-lg">
+                <iframe
+                  key={previewId}
+                  src={`https://www.youtube.com/embed/${previewId}?autoplay=1&rel=0&modestbranding=1`}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  className="h-full w-full"
+                  title="YouTube Preview"
+                />
+                <button
+                  onClick={handlePreviewClose}
+                  className="absolute right-2 top-2 rounded-full bg-black/60 p-1.5 text-white/70 hover:text-white transition-colors"
+                  title="Close player"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* Controls row */}
+              <div className="mt-3 flex items-center justify-between">
+                <div className="flex items-center gap-1">
+                  {previewIndex !== null && queue.length > 1 && (
+                    <>
+                      <button
+                        onClick={handlePreviewPrev}
+                        className="flex items-center gap-1 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary/80 transition-colors"
+                      >
+                        <ChevronLeft className="h-3.5 w-3.5" />
+                        Prev
+                      </button>
+                      <button
+                        onClick={handlePreviewNext}
+                        className="flex items-center gap-1 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-foreground hover:bg-secondary/80 transition-colors"
+                      >
+                        Next
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  {previewIndex !== null && (
+                    <span className="text-xs text-muted-foreground">
+                      Video {previewIndex + 1} / {queue.length}
+                    </span>
+                  )}
+                  <a
+                    href={`https://youtube.com/watch?v=${previewId}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                    title="Open on YouTube"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    YouTube
+                  </a>
+                  <button
+                    onClick={handlePreviewClose}
+                    className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-secondary/40 py-12">
+              <Youtube className="h-10 w-10 text-muted-foreground/30" />
+              <p className="text-sm font-medium text-muted-foreground">No video playing</p>
+              <p className="text-xs text-muted-foreground">
+                Paste a URL above or click the{" "}
+                <Eye className="inline h-3.5 w-3.5 align-text-bottom" /> icon on any queued video.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Share link */}
