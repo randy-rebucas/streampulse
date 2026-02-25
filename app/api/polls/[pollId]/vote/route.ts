@@ -32,7 +32,14 @@ export async function POST(
     return NextResponse.json({ error: "Invalid option index" }, { status: 400 });
   }
 
+  // Prevent double-voting
+  const alreadyVoted = poll.voters.some((v) => v.userId === session.user!.id);
+  if (alreadyVoted) {
+    return NextResponse.json({ error: "You have already voted." }, { status: 409 });
+  }
+
   poll.options[optionIndex].votes += 1;
+  poll.voters.push({ userId: session.user.id, optionIndex });
   await poll.save();
 
   const totalVotes = poll.options.reduce((s, o) => s + o.votes, 0);

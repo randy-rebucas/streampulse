@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
         id: m._id.toString(),
         content: m.content,
         username: m.userId?.name || m.userId?.username || "Anonymous",
+        userSlug: m.userId?.username ?? null,
         avatarUrl: m.userId?.image,
         isBot: m.isBot,
         isFlagged: m.isFlagged,

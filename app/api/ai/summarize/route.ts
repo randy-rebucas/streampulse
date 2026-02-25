@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { connectDB } from "@/lib/db";
+import { auth } from "@/auth";
 import { Stream } from "@/lib/models/stream";
 import { ChatMessage } from "@/lib/models/chatMessage";
 import { StreamSummary } from "@/lib/models/streamSummary";
@@ -11,19 +12,19 @@ const INTERNAL_SECRET = process.env.INTERNAL_SECRET;
 
 export async function POST(req: NextRequest) {
   try {
-    // Allow requests from the webhook (same-origin with internal secret)
-    // OR directly authenticated users (for future on-demand use).
+    // Allow requests from:
+    // 1. Webhook with internal secret
+    // 2. Same-origin client requests from the authenticated stream owner
     const internalToken = req.headers.get("x-internal-secret");
-    const isTrustedInternal =
-      INTERNAL_SECRET && internalToken === INTERNAL_SECRET;
+    const isTrustedInternal = INTERNAL_SECRET && internalToken === INTERNAL_SECRET;
 
-    // Reject unauthenticated external calls
+    let sessionUserId: string | null = null;
     if (!isTrustedInternal) {
-      const origin = req.headers.get("origin");
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
-      if (!appUrl || origin !== appUrl) {
+      const session = await auth();
+      if (!session?.user?.id) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 });
       }
+      sessionUserId = session.user.id;
     }
 
     const { streamId } = await req.json();
@@ -44,6 +45,11 @@ export async function POST(req: NextRequest) {
         { error: "Stream not found" },
         { status: 404 }
       );
+    }
+
+    // If called by an authenticated user, verify they own the stream
+    if (sessionUserId && stream.userId?.toString() !== sessionUserId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const chatMessages = await ChatMessage.find({ streamId, isFlagged: false })

@@ -1,9 +1,15 @@
 "use client";
 
 import { useEffect, useState, use, useCallback } from "react";
+import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { LiveKitRoom } from "@livekit/components-react";
-import { Loader2, AlertCircle, UserPlus, UserCheck } from "lucide-react";
+import { useSearchParams } from "next/navigation";
+import { LiveKitRoom, useRoomContext } from "@livekit/components-react";
+import {
+  Loader2, AlertCircle, UserPlus, UserCheck,
+  Mic, MicOff, Video, VideoOff,
+  MessageSquare, X, Users,
+} from "lucide-react";
 import { Navbar } from "@/components/layout/navbar";
 import { StreamPlayer } from "@/components/stream/stream-player";
 import { StreamInfo } from "@/components/stream/stream-info";
@@ -11,6 +17,88 @@ import { ChatPanel } from "@/components/chat/chat-panel";
 import { YouTubeSync } from "@/components/stream/youtube-sync";
 import { YouTubeQueuePlayer } from "@/components/stream/youtube-queue-player";
 import { useChatStore } from "@/stores/chat-store";
+
+const REACTION_EMOJIS = ["❤️", "🔥", "😂", "👏", "😮", "🎉"];
+
+/** Mic/camera controls for a guest co-streamer — rendered inside <LiveKitRoom> */
+function GuestControls() {
+  const room = useRoomContext();
+  const [micOn, setMicOn] = useState(false);
+  const [camOn, setCamOn] = useState(false);
+
+  const toggleMic = async () => {
+    try {
+      await room.localParticipant.setMicrophoneEnabled(!micOn);
+      setMicOn((v) => !v);
+    } catch (e) {
+      console.error("Failed to toggle mic:", e);
+    }
+  };
+
+  const toggleCam = async () => {
+    try {
+      await room.localParticipant.setCameraEnabled(!camOn);
+      setCamOn((v) => !v);
+    } catch (e) {
+      console.error("Failed to toggle camera:", e);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+      <span className="mr-1 text-xs font-medium text-primary">Co-Streamer</span>
+      <button
+        onClick={toggleMic}
+        title={micOn ? "Mute" : "Unmute"}
+        className={`rounded-lg p-2 transition-colors ${
+          micOn ? "bg-secondary text-foreground" : "bg-destructive/20 text-destructive"
+        }`}
+      >
+        {micOn ? <Mic className="h-4 w-4" /> : <MicOff className="h-4 w-4" />}
+      </button>
+      <button
+        onClick={toggleCam}
+        title={camOn ? "Camera off" : "Camera on"}
+        className={`rounded-lg p-2 transition-colors ${
+          camOn ? "bg-secondary text-foreground" : "bg-destructive/20 text-destructive"
+        }`}
+      >
+        {camOn ? <Video className="h-4 w-4" /> : <VideoOff className="h-4 w-4" />}
+      </button>
+    </div>
+  );
+}
+
+/** Rendered inside <LiveKitRoom> — can use useRoomContext safely */
+function MobileReactionBar() {
+  const room = useRoomContext();
+  const { addReaction } = useChatStore();
+
+  const handleReact = (emoji: string) => {
+    addReaction(emoji);
+    if (!room) return;
+    const encoder = new TextEncoder();
+    room.localParticipant.publishData(
+      encoder.encode(JSON.stringify({ type: "reaction", emoji })),
+      { reliable: true }
+    );
+  };
+
+  return (
+    <div className="flex items-center justify-center gap-1.5 py-2 lg:hidden">
+      {REACTION_EMOJIS.map((emoji) => (
+        <button
+          key={emoji}
+          onClick={() => handleReact(emoji)}
+          className="rounded-xl border border-border bg-secondary/60 px-2.5 py-1.5 text-xl hover:bg-secondary hover:scale-110 transition-all active:scale-95"
+          aria-label={`React ${emoji}`}
+        >
+          {emoji}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 interface StreamData {
   id: string;
@@ -36,6 +124,8 @@ export default function WatchPage({
 }) {
   const { streamId } = use(params);
   const { data: session } = useSession();
+  const searchParams = useSearchParams();
+  const guestTokenParam = searchParams?.get("guestToken");
   const isSignedIn = !!session;
   const [stream, setStream] = useState<StreamData | null>(null);
   const [token, setToken] = useState("");
@@ -44,6 +134,7 @@ export default function WatchPage({
   const [isFollowing, setIsFollowing] = useState(false);
   const [followerCount, setFollowerCount] = useState(0);
   const [followLoading, setFollowLoading] = useState(false);
+  const [mobileChatOpen, setMobileChatOpen] = useState(false);
   const setYoutubeVideoId = useChatStore((s) => s.setYoutubeVideoId);
   const setYoutubeQueue = useChatStore((s) => s.setYoutubeQueue);
   const youtubeVideoId = useChatStore((s) => s.youtubeVideoId);
@@ -80,7 +171,10 @@ export default function WatchPage({
           );
         }
 
-        if (isSignedIn) {
+        if (guestTokenParam) {
+          // Guest co-streamer: use the publisher token embedded in the URL
+          setToken(guestTokenParam);
+        } else if (isSignedIn) {
           const tokenRes = await fetch("/api/livekit/token", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -100,7 +194,7 @@ export default function WatchPage({
     }
 
     loadStream();
-  }, [streamId, isSignedIn, setYoutubeVideoId]);
+  }, [streamId, isSignedIn, guestTokenParam, setYoutubeQueue]);
 
   const handleFollow = useCallback(async () => {
     if (!stream || !session) return;
@@ -138,6 +232,9 @@ export default function WatchPage({
           <p className="text-muted-foreground">
             {error || "This stream doesn't exist or has ended."}
           </p>
+          <Link href="/" className="mt-2 text-sm text-primary hover:underline underline-offset-4">
+            Back to home
+          </Link>
         </div>
       </div>
     );
@@ -157,10 +254,24 @@ export default function WatchPage({
           ) : token && stream.isLive ? (
             <StreamPlayer streamerIdentity={stream.user.id} />
           ) : (
-            <div className="flex h-full items-center justify-center bg-secondary">
-              <p className="text-sm text-muted-foreground">
-                {token ? "Waiting for stream to start..." : "Sign in to watch this stream"}
-              </p>
+            <div className="flex h-full flex-col items-center justify-center gap-3 bg-secondary">
+              {token && !stream.isLive ? (
+                <>
+                  <Loader2 className="h-7 w-7 animate-spin text-muted-foreground/50" />
+                  <p className="text-sm text-muted-foreground">Waiting for stream to start…</p>
+                </>
+              ) : (
+                <>
+                  <AlertCircle className="h-7 w-7 text-muted-foreground/40" />
+                  <p className="text-sm text-muted-foreground">Sign in to watch this stream</p>
+                  <Link
+                    href="/sign-in"
+                    className="rounded-lg bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  >
+                    Sign in
+                  </Link>
+                </>
+              )}
             </div>
           )}
 
@@ -180,21 +291,32 @@ export default function WatchPage({
         <StreamInfo
           title={stream.title}
           streamerName={stream.user.name || stream.user.username}
+          streamerUsername={stream.user.username}
           streamerAvatar={stream.user.image || undefined}
           viewerCount={stream.viewerCount}
           tags={stream.tags}
           isLive={stream.isLive}
         />
 
-        {/* Follow button row */}
+        {/* Mobile reaction bar — only inside LiveKitRoom (token required) */}
+        {token && isSignedIn && <MobileReactionBar />}
+
+        {/* Guest co-streamer controls */}
+        {guestTokenParam && (
+          <div className="px-4 pb-2">
+            <GuestControls />
+          </div>
+        )}
+
+        {/* Follow / follower row */}
         {isSignedIn && !isStreamer && (
-          <div className="mt-1 flex items-center gap-3 px-4 pb-2">
+          <div className="mt-1 flex items-center gap-3 px-4 pb-3">
             <button
               onClick={handleFollow}
               disabled={followLoading}
               className={`flex items-center gap-1.5 rounded-lg px-4 py-1.5 text-sm font-medium transition-colors disabled:opacity-60 ${
                 isFollowing
-                  ? "bg-secondary text-foreground hover:bg-secondary/80"
+                  ? "border border-border bg-secondary text-foreground hover:bg-secondary/80"
                   : "bg-primary text-primary-foreground hover:bg-primary/90"
               }`}
             >
@@ -208,7 +330,8 @@ export default function WatchPage({
               {isFollowing ? "Following" : "Follow"}
             </button>
             {followerCount > 0 && (
-              <span className="text-xs text-muted-foreground">
+              <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Users className="h-3 w-3" />
                 {followerCount.toLocaleString()} followers
               </span>
             )}
@@ -236,10 +359,26 @@ export default function WatchPage({
 
             {mainContent}
 
-            {/* Chat sidebar — always in DOM for data channel; visually hidden on mobile */}
-            <div className="hidden w-80 shrink-0 border-l border-border lg:block">
+            {/* Chat sidebar — desktop */}
+            <div className="hidden w-80 shrink-0 border-l border-border lg:flex lg:flex-col">
               <ChatPanel streamId={streamId} isStreamer={isStreamer} />
             </div>
+
+            {/* Mobile chat toggle FAB */}
+            <button
+              onClick={() => setMobileChatOpen((v) => !v)}
+              className="fixed bottom-5 right-5 z-40 flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg lg:hidden"
+            >
+              {mobileChatOpen ? <X className="h-4 w-4" /> : <MessageSquare className="h-4 w-4" />}
+              {mobileChatOpen ? "Close" : "Chat"}
+            </button>
+
+            {/* Mobile chat bottom sheet */}
+            {mobileChatOpen && (
+              <div className="fixed inset-x-0 bottom-0 z-30 flex h-[60vh] flex-col border-t border-border bg-background shadow-2xl lg:hidden">
+                <ChatPanel streamId={streamId} isStreamer={isStreamer} />
+              </div>
+            )}
           </LiveKitRoom>
         ) : (
           mainContent

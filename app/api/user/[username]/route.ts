@@ -15,7 +15,7 @@ export async function GET(
   await connectDB();
 
   const user = await User.findOne({ username })
-    .select("_id name username image bio isStreamer createdAt")
+    .select("_id name username image bio isStreamer createdAt watchPartyQueue")
     .lean<any>();
 
   if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -61,5 +61,6 @@ export async function GET(
       scheduledAt: s.scheduledAt,
       tags: s.tags ?? [],
     })),
+    watchPartyQueue: user.watchPartyQueue ?? [],
   });
 }

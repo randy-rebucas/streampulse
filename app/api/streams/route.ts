@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { connectDB } from "@/lib/db";
 import { User } from "@/lib/models/user";
 import { Stream } from "@/lib/models/stream";
+import { StreamSummary } from "@/lib/models/streamSummary";
 
 export async function GET(req: NextRequest) {
   try {
@@ -34,6 +35,14 @@ export async function GET(req: NextRequest) {
       .limit(50)
       .lean<any[]>();
 
+    // If fetching for a specific user (dashboard analytics), include summaries
+    let summaryMap: Map<string, any> = new Map();
+    if (userId) {
+      const ids = streams.map((s) => s._id);
+      const summaries = await StreamSummary.find({ streamId: { $in: ids } }).lean<any[]>();
+      summaries.forEach((s) => summaryMap.set(s.streamId.toString(), s));
+    }
+
     const formatted = streams.map((s) => ({
       ...s,
       id: s._id.toString(),
@@ -44,6 +53,7 @@ export async function GET(req: NextRequest) {
             image: (s.userId as any).image,
           }
         : null,
+      summary: summaryMap.get(s._id.toString()) ?? null,
     }));
 
     return NextResponse.json({ streams: formatted });

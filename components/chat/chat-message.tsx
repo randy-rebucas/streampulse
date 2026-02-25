@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { Bot } from "lucide-react";
 import type { ChatMessage as ChatMessageType } from "@/stores/chat-store";
 
@@ -38,13 +39,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
       {/* Content */}
       <div className="min-w-0 flex-1">
         <span className="inline">
-          <span
-            className={`text-sm font-semibold ${
-              message.isBot ? "text-primary" : "text-foreground"
-            }`}
-          >
-            {message.isBot ? "StreamPulse AI" : message.username}
-          </span>
+          {message.isBot ? (
+            <span className="text-sm font-semibold text-primary">StreamPulse AI</span>
+          ) : message.userSlug ? (
+            <Link
+              href={`/u/${message.userSlug}`}
+              className="text-sm font-semibold text-foreground hover:text-primary transition-colors"
+            >
+              {message.username}
+            </Link>
+          ) : (
+            <span className="text-sm font-semibold text-foreground">{message.username}</span>
+          )}
           {message.isBot && (
             <span className="ml-1 inline-flex items-center rounded bg-primary/20 px-1 py-0.5 text-[10px] font-bold text-primary align-middle">
               BOT

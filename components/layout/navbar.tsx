@@ -3,11 +3,12 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useSession, signIn, signOut } from "next-auth/react";
-import { Radio, Search, LayoutDashboard, LogOut, User } from "lucide-react";
+import { Radio, Search, LayoutDashboard, LogOut } from "lucide-react";
 
 export function Navbar() {
   const { data: session } = useSession();
   const isSignedIn = !!session;
+  const username = (session?.user as any)?.username as string | undefined;
 
   return (
     <nav className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -42,7 +43,24 @@ export function Navbar() {
                 <span className="hidden sm:inline">Dashboard</span>
               </Link>
               <div className="flex items-center gap-2">
-                {session.user?.image ? (
+                {/* Avatar — links to own public profile */}
+                {username ? (
+                  <Link href={`/u/${username}`} title="Your profile">
+                    {session.user?.image ? (
+                      <Image
+                        src={session.user.image}
+                        alt={session.user.name ?? "User"}
+                        width={32}
+                        height={32}
+                        className="h-8 w-8 rounded-full object-cover hover:ring-2 hover:ring-primary/50 transition-all"
+                      />
+                    ) : (
+                      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary hover:ring-2 hover:ring-primary/50 transition-all">
+                        <span className="text-sm font-bold text-primary">{(session.user?.name ?? username)[0]?.toUpperCase()}</span>
+                      </div>
+                    )}
+                  </Link>
+                ) : session.user?.image ? (
                   <Image
                     src={session.user.image}
                     alt={session.user.name ?? "User"}
@@ -52,7 +70,7 @@ export function Navbar() {
                   />
                 ) : (
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-secondary">
-                    <User className="h-4 w-4" />
+                    <span className="text-sm font-bold">{(session.user?.name ?? "U")[0]?.toUpperCase()}</span>
                   </div>
                 )}
                 <button

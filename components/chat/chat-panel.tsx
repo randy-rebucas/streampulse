@@ -67,6 +67,7 @@ export function ChatPanel({ streamId, isStreamer = false }: ChatPanelProps) {
               id: data.id || crypto.randomUUID(),
               content: data.content,
               username: data.username,
+              userSlug: data.userSlug,
               avatarUrl: data.avatarUrl,
               isBot: data.isBot || false,
               isFlagged: false,
@@ -114,6 +115,7 @@ export function ChatPanel({ streamId, isStreamer = false }: ChatPanelProps) {
               id: m.id,
               content: m.content,
               username: m.username || "Anonymous",
+              userSlug: m.userSlug ?? undefined,
               avatarUrl: m.avatarUrl,
               isBot: m.isBot,
               isFlagged: m.isFlagged,
@@ -154,7 +156,7 @@ export function ChatPanel({ streamId, isStreamer = false }: ChatPanelProps) {
         });
         if (!res.ok) return { error: "Failed to send shoutout.", handled: true };
         const data = await res.json();
-        broadcast({ type: "chat", id: data.messageId, content, username: session?.user?.name ?? "Streamer", avatarUrl: session?.user?.image, isBot: false, createdAt: Date.now() });
+        broadcast({ type: "chat", id: data.messageId, content, username: session?.user?.name ?? "Streamer", userSlug: (session?.user as any)?.username, avatarUrl: session?.user?.image, isBot: false, createdAt: Date.now() });
         return { handled: true };
       }
 
@@ -209,7 +211,20 @@ export function ChatPanel({ streamId, isStreamer = false }: ChatPanelProps) {
         });
         const data = await res.json();
         if (!res.ok) return { error: data.error || "Message was not sent" };
-        broadcast({ type: "chat", id: data.messageId, content, username: session.user.name ?? session.user.email ?? "User", avatarUrl: session.user.image, isBot: false, createdAt: Date.now() });
+        broadcast({ type: "chat", id: data.messageId, content, username: session.user.name ?? session.user.email ?? "User", userSlug: (session.user as any).username, avatarUrl: session.user.image, isBot: false, createdAt: Date.now() });
+        // If the bot responded, broadcast it in real-time too
+        if (data.botMessage) {
+          broadcast({
+            type: "chat",
+            id: data.botMessage.id,
+            content: data.botMessage.content,
+            username: "StreamPulse AI",
+            userSlug: undefined,
+            avatarUrl: undefined,
+            isBot: true,
+            createdAt: Date.now() + 1,
+          });
+        }
         return {};
       } catch {
         return { error: "Failed to send message" };
@@ -233,7 +248,7 @@ export function ChatPanel({ streamId, isStreamer = false }: ChatPanelProps) {
 
       {/* Poll widget */}
       <div className="border-b border-border px-3 py-2">
-        <PollWidget streamId={streamId} isStreamer={isStreamer} />
+        <PollWidget streamId={streamId} isStreamer={isStreamer} onBroadcast={broadcast} />
       </div>
 
       {/* Messages */}

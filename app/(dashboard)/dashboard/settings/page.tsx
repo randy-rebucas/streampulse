@@ -3,16 +3,19 @@
 import { useState, useEffect } from "react";
 import { useSession } from "next-auth/react";
 import {
-  Settings,
   Loader2,
   Check,
   Key,
+  Copy,
   RefreshCw,
   Eye,
   EyeOff,
   ShieldCheck,
   Clock,
   Pin,
+  User,
+  MessageSquare,
+  AlertCircle,
 } from "lucide-react";
 
 export default function SettingsPage() {
@@ -38,6 +41,7 @@ export default function SettingsPage() {
   const [newKey, setNewKey] = useState<string | null>(null);
   const [showKey, setShowKey] = useState(false);
   const [keyCopied, setKeyCopied] = useState(false);
+  const [adminSaving, setAdminSaving] = useState(false);
 
   // Load profile data
   useEffect(() => {
@@ -70,8 +74,8 @@ export default function SettingsPage() {
       .catch(() => {});
   }, [session]);
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async (e?: React.FormEvent) => {
+    e?.preventDefault();
     setError("");
     setLoading(true);
     const res = await fetch("/api/user/profile", {
@@ -87,7 +91,7 @@ export default function SettingsPage() {
     }
     await update({ name });
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setTimeout(() => setSaved(false), 2500);
   };
 
   const handleRegenerateKey = async () => {
@@ -123,78 +127,92 @@ export default function SettingsPage() {
   };
 
   const handleSaveAdminSettings = async () => {
+    setAdminSaving(true);
     const words = bannedWords
       .split(/[\n,]+/)
       .map((w) => w.trim().toLowerCase())
       .filter(Boolean);
-    const res = await fetch("/api/admin/settings", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bannedWords: words, moderationThreshold }),
-    });
-    if (res.ok) {
-      setAdminSaved(true);
-      setTimeout(() => setAdminSaved(false), 2000);
-    } else {
-      alert("Failed to save admin settings.");
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bannedWords: words, moderationThreshold }),
+      });
+      if (res.ok) {
+        setAdminSaved(true);
+        setTimeout(() => setAdminSaved(false), 2500);
+      } else {
+        alert("Failed to save admin settings.");
+      }
+    } finally {
+      setAdminSaving(false);
     }
   };
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-8">
-        <h1 className="flex items-center gap-2 text-2xl font-bold">
-          <Settings className="h-6 w-6 text-primary" />
-          Settings
-        </h1>
-        <p className="text-muted-foreground">Manage your profile and account</p>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold">Settings</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">Manage your profile and account</p>
       </div>
 
-      {/* Profile */}
-      <div className="mb-6 rounded-xl border border-border bg-card p-6">
-        <h2 className="mb-4 text-lg font-semibold">Profile</h2>
+      {/* ── Profile ────────────────────────────────────────── */}
+      <div className="mb-5 rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+          <User className="h-4 w-4 text-primary" />
+          Profile
+        </h2>
 
+        {/* Avatar row */}
         {session?.user?.image && (
-          <div className="mb-6 flex items-center gap-4">
+          <div className="mb-5 flex items-center gap-4 rounded-lg border border-border bg-secondary px-4 py-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={session.user.image}
               alt={session.user.name ?? ""}
-              className="h-16 w-16 rounded-full object-cover"
+              className="h-12 w-12 rounded-full object-cover ring-2 ring-border"
             />
-            <div>
-              <p className="font-medium">{session.user.name}</p>
-              <p className="text-sm text-muted-foreground">{session.user.email}</p>
+            <div className="min-w-0">
+              <p className="truncate font-medium">{session.user.name}</p>
+              <p className="truncate text-xs text-muted-foreground">{session.user.email}</p>
             </div>
           </div>
         )}
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           {error && (
-            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <div className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
               {error}
-            </p>
+            </div>
           )}
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Display Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-            />
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Display Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium">Email</label>
+              <input
+                type="email"
+                value={session?.user?.email ?? ""}
+                disabled
+                className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
+              />
+            </div>
           </div>
+
           <div>
-            <label className="mb-1.5 block text-sm font-medium">Email</label>
-            <input
-              type="email"
-              value={session?.user?.email ?? ""}
-              disabled
-              className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm text-muted-foreground cursor-not-allowed"
-            />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium">Bio</label>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-sm font-medium">Bio</label>
+              <span className="text-xs text-muted-foreground">{bio.length}/300</span>
+            </div>
             <textarea
               value={bio}
               onChange={(e) => setBio(e.target.value)}
@@ -203,15 +221,35 @@ export default function SettingsPage() {
               placeholder="Tell your viewers about yourself…"
               className="w-full resize-none rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            <p className="mt-1 text-right text-xs text-muted-foreground">{bio.length}/300</p>
           </div>
 
+          <div className="flex justify-end border-t border-border pt-4">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : null}
+              {saved ? "Saved" : "Save Profile"}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* ── Chat Settings ───────────────────────────────────── */}
+      <div className="mb-5 rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-4 flex items-center gap-2 text-sm font-semibold">
+          <MessageSquare className="h-4 w-4 text-primary" />
+          Chat Settings
+        </h2>
+
+        <div className="flex flex-col gap-4">
           {/* Slow mode */}
           <div>
-            <label className="mb-1.5 flex items-center gap-2 text-sm font-medium">
+            <label className="mb-2 flex items-center gap-2 text-sm font-medium">
               <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-              Chat Slow Mode
-              <span className="ml-auto text-xs text-muted-foreground">
+              Slow Mode
+              <span className="ml-auto rounded-md bg-secondary px-2 py-0.5 text-xs font-semibold tabular-nums">
                 {slowMode === 0 ? "Off" : `${slowMode}s`}
               </span>
             </label>
@@ -224,9 +262,8 @@ export default function SettingsPage() {
               onChange={(e) => setSlowMode(Number(e.target.value))}
               className="w-full accent-primary"
             />
-            <div className="flex justify-between text-[10px] text-muted-foreground">
+            <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
               <span>Off</span>
-              <span>5s</span>
               <span>30s</span>
               <span>60s</span>
               <span>120s</span>
@@ -238,6 +275,7 @@ export default function SettingsPage() {
             <label className="mb-1.5 flex items-center gap-2 text-sm font-medium">
               <Pin className="h-3.5 w-3.5 text-muted-foreground" />
               Pinned Chat Message
+              <span className="ml-auto text-xs font-normal text-muted-foreground">(optional)</span>
             </label>
             <input
               type="text"
@@ -247,46 +285,50 @@ export default function SettingsPage() {
               placeholder="Leave blank to unpin"
               className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
+            <p className="mt-1 text-xs text-muted-foreground">Shown pinned at the top of your chat for all viewers.</p>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end border-t border-border pt-4">
             <button
-              type="submit"
+              type="button"
+              onClick={() => handleSave()}
               disabled={loading}
               className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
             >
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              {saved && <Check className="h-4 w-4" />}
-              {saved ? "Saved!" : "Save Changes"}
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : saved ? <Check className="h-4 w-4" /> : null}
+              {saved ? "Saved" : "Save Chat Settings"}
             </button>
           </div>
-        </form>
+        </div>
       </div>
 
-      {/* Stream Key */}
-      <div className="mb-6 rounded-xl border border-border bg-card p-6">
-        <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold">
-          <Key className="h-4 w-4 text-muted-foreground" />
+      {/* ── Stream Key ──────────────────────────────────────── */}
+      <div className="mb-5 rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+          <Key className="h-4 w-4 text-primary" />
           Stream Key
         </h2>
-        <p className="mb-4 text-sm text-muted-foreground">
-          Your stream key authenticates your streaming software (OBS, etc.). Keep it secret.
+        <p className="mb-4 text-xs text-muted-foreground">
+          Used in OBS or any RTMP software. Server:{" "}
+          <code className="rounded bg-secondary px-1 py-0.5 font-mono text-[11px]">rtmp://&lt;your-server&gt;/live</code>. Keep your key secret.
         </p>
 
         {newKey ? (
           <div className="mb-4">
-            <p className="mb-2 text-xs font-medium text-green-600">
+            <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-green-500">
+              <Check className="h-3.5 w-3.5" />
               New key generated — copy it now, it won&apos;t be shown again.
-            </p>
+            </div>
             <div className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-secondary px-3 py-2">
               <code className="flex-1 truncate font-mono text-xs text-primary">
                 {showKey ? newKey : "•".repeat(Math.min(newKey.length, 40))}
               </code>
               <button
                 onClick={() => setShowKey(!showKey)}
-                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground transition-colors"
+                title={showKey ? "Hide" : "Show"}
               >
-                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                {showKey ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
               </button>
               <button
                 onClick={() => {
@@ -294,9 +336,10 @@ export default function SettingsPage() {
                   setKeyCopied(true);
                   setTimeout(() => setKeyCopied(false), 2000);
                 }}
-                className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                className="shrink-0 rounded p-1 text-muted-foreground hover:text-foreground transition-colors"
+                title="Copy key"
               >
-                {keyCopied ? <Check className="h-4 w-4 text-green-500" /> : <Key className="h-4 w-4" />}
+                {keyCopied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5" />}
               </button>
             </div>
           </div>
@@ -305,31 +348,31 @@ export default function SettingsPage() {
             <code className="flex-1 font-mono text-xs text-muted-foreground select-none">
               ••••••••••••••••••••••••••••••••
             </code>
-            <span className="text-xs text-muted-foreground">Hidden for security</span>
+            <span className="text-xs text-muted-foreground">hidden for security</span>
           </div>
         )}
 
         <button
           onClick={handleRegenerateKey}
           disabled={keyLoading}
-          className="flex items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors disabled:opacity-50"
         >
           {keyLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Regenerate Stream Key
         </button>
       </div>
 
-      {/* Admin — Site Settings */}
+      {/* ── Admin — Site Settings ──────────────────────────── */}
       {isAdmin && (
-        <div className="rounded-xl border border-border bg-card p-6">
-          <h2 className="mb-1 flex items-center gap-2 text-lg font-semibold">
-            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+        <div className="rounded-xl border border-primary/20 bg-card p-5">
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
+            <ShieldCheck className="h-4 w-4 text-primary" />
             Site Settings
-            <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+            <span className="ml-auto rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-primary">
               Admin
             </span>
           </h2>
-          <p className="mb-5 text-sm text-muted-foreground">Global settings that affect all users.</p>
+          <p className="mb-5 text-xs text-muted-foreground">Global settings that affect all users.</p>
 
           {/* Registration toggle */}
           <div className="mb-5 flex items-center justify-between gap-4 rounded-lg border border-border bg-secondary px-4 py-3">
@@ -401,13 +444,14 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className="flex justify-end">
+          <div className="flex justify-end border-t border-border pt-4">
             <button
               onClick={handleSaveAdminSettings}
-              className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              disabled={adminSaving}
+              className="flex items-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-60"
             >
-              {adminSaved && <Check className="h-4 w-4" />}
-              {adminSaved ? "Saved!" : "Save Admin Settings"}
+              {adminSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : adminSaved ? <Check className="h-4 w-4" /> : null}
+              {adminSaved ? "Saved" : "Save Admin Settings"}
             </button>
           </div>
         </div>

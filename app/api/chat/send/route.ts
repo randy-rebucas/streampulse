@@ -117,19 +117,28 @@ export async function POST(req: NextRequest) {
     // ── Save message ────────────────────────────────────────────────────────
     const message = await ChatMessage.create({ content, streamId, userId: dbUser?._id });
 
-    // Check if bot should respond (non-blocking)
+    // ── Bot response (awaited so client can broadcast it in real-time) ────
+    let botMessage: { id: string; content: string } | null = null;
     if (shouldBotRespond(content) && stream) {
-      handleBotResponse(stream, streamId, content).catch(console.error);
+      try {
+        botMessage = await handleBotResponse(stream, streamId, content);
+      } catch (e) {
+        console.error("Bot response error:", e);
+      }
     }
 
-    return NextResponse.json({ messageId: message.id });
+    return NextResponse.json({ messageId: message.id, botMessage });
   } catch (error) {
     console.error("Chat send error:", error);
     return NextResponse.json({ error: "Failed to send message" }, { status: 500 });
   }
 }
 
-async function handleBotResponse(stream: any, streamId: string, triggerMessage: string) {
+async function handleBotResponse(
+  stream: any,
+  streamId: string,
+  triggerMessage: string
+): Promise<{ id: string; content: string } | null> {
   const recentMessages = await ChatMessage.find({ streamId, isFlagged: false })
     .populate("userId", "username")
     .sort({ createdAt: -1 })
@@ -148,5 +157,6 @@ async function handleBotResponse(stream: any, streamId: string, triggerMessage: 
     triggerMessage
   );
 
-  await ChatMessage.create({ content: botResponse, streamId, isBot: true });
+  const saved = await ChatMessage.create({ content: botResponse, streamId, isBot: true });
+  return { id: saved.id, content: botResponse };
 }

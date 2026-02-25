@@ -7,10 +7,11 @@ import { useChatStore } from "@/stores/chat-store";
 interface PollWidgetProps {
   streamId: string;
   isStreamer: boolean;
-  /** Optional: stream owner will see a create panel */
+  /** Broadcast a LiveKit data message to all viewers */
+  onBroadcast?: (data: object) => void;
 }
 
-export function PollWidget({ streamId, isStreamer }: PollWidgetProps) {
+export function PollWidget({ streamId, isStreamer, onBroadcast }: PollWidgetProps) {
   const { activePoll, setActivePoll, updatePollVotes } = useChatStore();
 
   // ── Streamer: create poll form ──────────────────────────────────────────
@@ -42,6 +43,7 @@ export function PollWidget({ streamId, isStreamer }: PollWidgetProps) {
     if (res.ok) {
       const { poll } = await res.json();
       setActivePoll(poll);
+      onBroadcast?.({ type: "poll_create", poll });
       setCreating(false);
       setQuestion("");
       setOptions(["", ""]);
@@ -51,6 +53,7 @@ export function PollWidget({ streamId, isStreamer }: PollWidgetProps) {
   const handleEnd = async () => {
     await fetch(`/api/polls?streamId=${streamId}`, { method: "DELETE" });
     setActivePoll(null);
+    onBroadcast?.({ type: "poll_end" });
   };
 
   // ── Viewer: vote ────────────────────────────────────────────────────────
@@ -68,6 +71,7 @@ export function PollWidget({ streamId, isStreamer }: PollWidgetProps) {
     if (res.ok) {
       const { options: opts, totalVotes } = await res.json();
       updatePollVotes(opts, totalVotes, optionIndex);
+      onBroadcast?.({ type: "poll_update", poll: { options: opts, totalVotes } });
     }
   };
 

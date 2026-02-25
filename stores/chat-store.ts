@@ -4,6 +4,7 @@ export interface ChatMessage {
   id: string;
   content: string;
   username: string;
+  userSlug?: string;  // URL-safe username for /u/[username] links
   avatarUrl?: string;
   isBot: boolean;
   isFlagged: boolean;

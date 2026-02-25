@@ -15,6 +15,7 @@ import {
   Video,
   Tag,
   FileText,
+  AlignLeft,
   Copy,
   Check,
   ExternalLink,
@@ -26,8 +27,11 @@ import {
   UserPlus,
   Calendar,
   Trash,
+  Monitor,
+  Users,
 } from "lucide-react";
 import { StreamControls } from "@/components/stream/stream-controls";
+import { ChatPanel } from "@/components/chat/chat-panel";
 import { STREAM_TAGS } from "@/lib/constants";
 import { useChatStore } from "@/stores/chat-store";
 import { YouTubeQueuePlayer } from "@/components/stream/youtube-queue-player";
@@ -315,6 +319,7 @@ export default function StreamPage() {
   const [token, setToken] = useState("");
   const [streamId, setStreamId] = useState("");
   const [copied, setCopied] = useState(false);
+  const [overlayCopied, setOverlayCopied] = useState(false);
   const [activeSessions, setActiveSessions] = useState<ActiveStream[]>([]);
   const [endingId, setEndingId] = useState<string | null>(null);
   const [youtubeStreamKey, setYoutubeStreamKey] = useState("");
@@ -323,6 +328,7 @@ export default function StreamPage() {
   const [guestLink, setGuestLink] = useState<string | null>(null);
   const [guestCopied, setGuestCopied] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
+  const [liveViewerCount, setLiveViewerCount] = useState(0);
 
   // Scheduled streams
   const [schedTitle, setSchedTitle] = useState("");
@@ -333,6 +339,21 @@ export default function StreamPage() {
   const [schedules, setSchedules] = useState<Array<{id: string; title: string; scheduledAt: string; tags: string[]}>>([]);
 
   const watchUrl = typeof window !== "undefined" ? `${window.location.origin}/watch/${streamId}` : ``;
+  const overlayUrl = typeof window !== "undefined" ? `${window.location.origin}/stream-overlay/${streamId}` : ``;
+
+  // Poll viewer count while live
+  useEffect(() => {
+    if (!isLive || !streamId) return;
+    const poll = () => {
+      fetch(`/api/streams/${streamId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d) => { if (d?.stream) setLiveViewerCount(d.stream.viewerCount ?? 0); })
+        .catch(() => {});
+    };
+    poll();
+    const id = setInterval(poll, 10_000);
+    return () => clearInterval(id);
+  }, [isLive, streamId]);
 
   useEffect(() => {
     if (!session?.user?.id) return;
@@ -504,120 +525,157 @@ export default function StreamPage() {
 
   if (isLive && token) {
     return (
-      <div className="mx-auto max-w-4xl">
-        <div className="mb-4 flex items-center gap-3">
-          <div className="flex items-center gap-2 rounded-lg bg-live/10 px-3 py-1.5">
-            <span className="h-2 w-2 rounded-full bg-live animate-pulse-live" />
+      <div className="mx-auto max-w-7xl">
+        {/* Status bar */}
+        <div className="mb-4 flex items-center gap-3 rounded-xl border border-live/20 bg-live/5 px-4 py-3">
+          <div className="flex items-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-live animate-pulse-live" />
             <span className="text-sm font-bold text-live">LIVE</span>
           </div>
           {youtubeStatus === "live" && (
-            <div className="flex items-center gap-2 rounded-lg bg-red-600/10 px-3 py-1.5">
+            <div className="flex items-center gap-1.5 rounded-lg bg-red-600/10 px-2.5 py-1">
               <Youtube className="h-3.5 w-3.5 text-red-600" />
-              <span className="text-sm font-bold text-red-600">YouTube</span>
+              <span className="text-xs font-bold text-red-600">YouTube</span>
             </div>
           )}
           {youtubeStatus === "starting" && (
-            <div className="flex items-center gap-2 rounded-lg bg-muted px-3 py-1.5">
+            <div className="flex items-center gap-1.5 rounded-lg bg-muted px-2.5 py-1">
               <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Starting YouTube...</span>
+              <span className="text-xs text-muted-foreground">Starting YouTube…</span>
             </div>
           )}
           {youtubeStatus === "error" && (
-            <div className="rounded-lg bg-destructive/10 px-3 py-1.5">
-              <span className="text-sm text-destructive">YouTube failed</span>
+            <div className="rounded-lg bg-destructive/10 px-2.5 py-1">
+              <span className="text-xs text-destructive">YouTube failed</span>
             </div>
           )}
-          <h1 className="text-lg font-bold truncate">{title}</h1>
+          <h1 className="flex-1 truncate text-sm font-semibold">{title}</h1>
+          <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Users className="h-3.5 w-3.5" />
+            <span>{liveViewerCount}</span>
+          </div>
+          <button
+            onClick={handleEndStream}
+            className="flex items-center gap-1.5 rounded-lg bg-destructive/10 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/20 transition-colors"
+          >
+            <PhoneOff className="h-3.5 w-3.5" />
+            End stream
+          </button>
         </div>
 
         <LiveKitRoom
           token={token}
           serverUrl={process.env.NEXT_PUBLIC_LIVEKIT_WS_URL}
           connect={true}
-          className="flex flex-col gap-4"
+          className="flex gap-4"
         >
-          {/* Video preview */}
-          <div className="aspect-video overflow-hidden rounded-xl bg-black">
-            <LocalVideoPreview />
+          {/* Left column: video + controls */}
+          <div className="flex flex-1 flex-col gap-4 min-w-0">
+            {/* Video preview */}
+            <div className="aspect-video overflow-hidden rounded-xl bg-black">
+              <LocalVideoPreview />
+            </div>
+
+            {/* Controls */}
+            <StreamControls onEndStream={handleEndStream} />
+
+            {/* Share & Tools */}
+            <div className="rounded-xl border border-border bg-card p-4 space-y-4">
+              <p className="text-sm font-semibold">Share &amp; Tools</p>
+
+              {/* Watch URL */}
+              <div>
+                <p className="mb-1.5 text-xs font-medium text-muted-foreground">Watch link</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 truncate rounded bg-secondary px-3 py-2 text-xs text-primary">{watchUrl}</code>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(watchUrl); setCopied(true); setTimeout(() => setCopied(false), 2000); }}
+                    className="shrink-0 rounded-lg bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Copy link"
+                  >
+                    {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                  <a href={watchUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-lg bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors" title="Open">
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+
+              <div className="border-t border-border" />
+
+              {/* OBS overlay */}
+              <div>
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
+                  <p className="text-xs font-medium text-muted-foreground">OBS Browser Source (chat overlay)</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 truncate rounded bg-secondary px-3 py-2 text-xs text-primary">{overlayUrl}</code>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(overlayUrl); setOverlayCopied(true); setTimeout(() => setOverlayCopied(false), 2000); }}
+                    className="shrink-0 rounded-lg bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors"
+                    title="Copy overlay URL"
+                  >
+                    {overlayCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                  <a href={overlayUrl} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-lg bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors" title="Preview">
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            {/* Watch Party */}
+            <YouTubePartyControls streamId={streamId} />
+
+            {/* Guest Co-Streamer Invite */}
+            <div className="rounded-xl border border-border bg-card p-4">
+              <div className="mb-2 flex items-center gap-2">
+                <UserPlus className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium">Invite Co-Streamer</span>
+              </div>
+              <p className="mb-3 text-xs text-muted-foreground">
+                Generate a guest link that lets someone join your stream as a co-host (camera + mic, no room admin).
+              </p>
+              {guestLink ? (
+                <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-secondary px-3 py-2">
+                  <code className="flex-1 truncate text-xs text-primary">{guestLink}</code>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(guestLink); setGuestCopied(true); setTimeout(() => setGuestCopied(false), 2000); }}
+                    className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {guestCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={handleGuestInvite}
+                  disabled={guestLoading}
+                  className="flex items-center gap-2 rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50"
+                >
+                  {guestLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
+                  Generate Guest Link
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* Controls */}
-          <StreamControls onEndStream={handleEndStream} />
-
-          {/* Watch Party */}
-          <YouTubePartyControls streamId={streamId} />
-
-          {/* Guest Co-Streamer Invite */}
-          <div className="rounded-xl border border-border bg-card p-4">
-            <div className="mb-2 flex items-center gap-2">
-              <UserPlus className="h-4 w-4 text-primary" />
-              <span className="text-sm font-medium">Invite Co-Streamer</span>
+          {/* Right column: chat + polls + reactions */}
+          <div className="w-80 shrink-0">
+            <div className="sticky top-4 h-[calc(100vh-8rem)]">
+              <ChatPanel streamId={streamId} isStreamer={true} />
             </div>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Generate a guest link that lets someone join your stream as a co-host (camera + mic, no room admin).
-            </p>
-            {guestLink ? (
-              <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-secondary px-3 py-2">
-                <code className="flex-1 truncate text-xs text-primary">{guestLink}</code>
-                <button
-                  onClick={() => { navigator.clipboard.writeText(guestLink); setGuestCopied(true); setTimeout(() => setGuestCopied(false), 2000); }}
-                  className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
-                >
-                  {guestCopied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={handleGuestInvite}
-                disabled={guestLoading}
-                className="flex items-center gap-2 rounded-lg bg-secondary px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary/80 transition-colors disabled:opacity-50"
-              >
-                {guestLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                Generate Guest Link
-              </button>
-            )}
           </div>
         </LiveKitRoom>
-
-        <div className="mt-4 rounded-xl border border-border bg-card p-4">
-          <p className="mb-2 text-sm font-medium">Share with your viewers</p>
-          <div className="flex items-center gap-2">
-            <code className="flex-1 truncate rounded bg-secondary px-3 py-2 text-xs text-primary">
-              {watchUrl}
-            </code>
-            <button
-              onClick={() => {
-                navigator.clipboard.writeText(watchUrl);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
-              className="shrink-0 rounded-lg bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors"
-              title="Copy link"
-            >
-              {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
-            </button>
-            <a
-              href={watchUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="shrink-0 rounded-lg bg-secondary p-2 text-muted-foreground hover:text-foreground transition-colors"
-              title="Open in new tab"
-            >
-              <ExternalLink className="h-4 w-4" />
-            </a>
-          </div>
-        </div>
       </div>
     );
   }
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold">Go Live</h1>
-        <p className="text-muted-foreground">
-          Set up your stream and start broadcasting
-        </p>
+        <p className="text-muted-foreground">Set up your stream and start broadcasting</p>
       </div>
 
       {/* Active sessions */}
@@ -654,80 +712,94 @@ export default function StreamPage() {
         </div>
       )}
 
-      <div className="space-y-6">
-        {/* Title */}
-        <div>
-          <label className="mb-2 block text-sm font-medium">
-            <FileText className="mr-1.5 inline h-4 w-4" />
-            Stream Title *
-          </label>
-          <input
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Enter your stream title..."
-            className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
-            maxLength={100}
-          />
-        </div>
+      <div className="space-y-5">
+        {/* Stream setup card */}
+        <div className="rounded-xl border border-border bg-card p-5 space-y-5">
+          <h2 className="flex items-center gap-2 text-sm font-semibold">
+            <FileText className="h-4 w-4 text-primary" />
+            Stream Setup
+          </h2>
 
-        {/* Description */}
-        <div>
-          <label className="mb-2 block text-sm font-medium">
-            <FileText className="mr-1.5 inline h-4 w-4" />
-            Description
-          </label>
-          <textarea
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="What's your stream about?"
-            rows={3}
-            className="w-full rounded-lg border border-border bg-secondary px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
-            maxLength={500}
-          />
-        </div>
+          {/* Title */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="text-sm font-medium">Title <span className="text-destructive">*</span></label>
+              <span className="text-xs text-muted-foreground">{title.length}/100</span>
+            </div>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Enter your stream title…"
+              className="w-full rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              maxLength={100}
+            />
+          </div>
 
-        {/* Tags */}
-        <div>
-          <label className="mb-2 block text-sm font-medium">
-            <Tag className="mr-1.5 inline h-4 w-4" />
-            Tags (up to 3)
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {STREAM_TAGS.map((tag) => (
-              <button
-                key={tag}
-                onClick={() => toggleTag(tag)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  selectedTags.includes(tag)
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-secondary text-muted-foreground hover:bg-secondary/80"
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
+          {/* Description */}
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <label className="flex items-center gap-1.5 text-sm font-medium">
+                <AlignLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                Description
+                <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+              </label>
+              <span className="text-xs text-muted-foreground">{description.length}/500</span>
+            </div>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What's your stream about?"
+              rows={3}
+              className="w-full rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+              maxLength={500}
+            />
+          </div>
+
+          {/* Tags */}
+          <div>
+            <label className="mb-2 flex items-center gap-1.5 text-sm font-medium">
+              <Tag className="h-3.5 w-3.5 text-muted-foreground" />
+              Tags
+              <span className="ml-auto text-xs font-normal text-muted-foreground">
+                {selectedTags.length}/3 selected
+              </span>
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {STREAM_TAGS.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    selectedTags.includes(tag)
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-secondary text-muted-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 
         {/* YouTube Streaming */}
         <div className="rounded-xl border border-border bg-card p-4">
-          <label className="mb-1 flex items-center gap-2 text-sm font-medium">
-            <Youtube className="h-4 w-4 text-red-600" />
-            Stream to YouTube <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+          <label className="mb-1 flex items-center gap-2 text-sm font-semibold">
+            <Youtube className="h-4 w-4 text-red-500" />
+            Stream to YouTube
+            <span className="text-xs font-normal text-muted-foreground">(optional)</span>
           </label>
           <p className="mb-3 text-xs text-muted-foreground">
-            Enter your YouTube stream key to simultaneously broadcast to YouTube Live.
-            Get it from{" "}
+            Simultaneously broadcast to YouTube Live via egress.{" "}
             <a
               href="https://studio.youtube.com/channel/live"
               target="_blank"
               rel="noopener noreferrer"
               className="text-primary underline-offset-4 hover:underline"
             >
-              YouTube Studio
-            </a>
-            .
+              Get your stream key
+            </a>.
           </p>
           <input
             type="password"
@@ -742,71 +814,83 @@ export default function StreamPage() {
         <button
           onClick={handleGoLive}
           disabled={!title.trim() || isLoading}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-live py-4 text-base font-bold text-white hover:bg-live/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-live py-4 text-base font-bold text-white hover:bg-live/90 transition-all shadow-lg shadow-live/20 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none"
         >
           {isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin" />
           ) : (
             <Radio className="h-5 w-5" />
           )}
-          {isLoading ? "Starting stream..." : "Go Live"}
+          {isLoading ? "Starting stream…" : "Go Live"}
         </button>
 
         {/* Scheduled Streams */}
         <div className="rounded-xl border border-border bg-card p-5">
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold">
+          <h3 className="mb-4 flex items-center gap-2 text-sm font-semibold">
             <Calendar className="h-4 w-4 text-primary" />
             Schedule a Stream
           </h3>
-          <div className="mb-3 flex flex-col gap-3">
+
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <input
               type="text"
               value={schedTitle}
               onChange={(e) => setSchedTitle(e.target.value)}
               placeholder="Stream title"
-              className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
             <input
               type="datetime-local"
               value={schedAt}
               onChange={(e) => setSchedAt(e.target.value)}
-              className="w-full rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+              className="rounded-lg border border-border bg-secondary px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
             />
-            <div className="flex flex-wrap gap-1.5">
-              {STREAM_TAGS.slice(0, 8).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setSchedTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t])}
-                  className={`rounded-full px-2.5 py-1 text-xs transition-colors ${schedTags.includes(t) ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}
-                >
-                  {t}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={handleCreateSchedule}
-              disabled={!schedTitle || !schedAt || schedSaving}
-              className="flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
-            >
-              {schedSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
-              Add to Schedule
-            </button>
           </div>
 
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {STREAM_TAGS.slice(0, 8).map((t) => (
+              <button
+                key={t}
+                onClick={() => setSchedTags((prev) => prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t])}
+                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${schedTags.includes(t) ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground hover:bg-secondary/80"}`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={handleCreateSchedule}
+            disabled={!schedTitle || !schedAt || schedSaving}
+            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {schedSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Add to Schedule
+          </button>
+
           {schedules.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground">Upcoming</p>
-              {schedules.map((s) => (
-                <div key={s.id} className="flex items-center gap-3 rounded-lg border border-border bg-secondary px-3 py-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium">{s.title}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(s.scheduledAt).toLocaleString()}</p>
+            <div className="mt-4 space-y-2">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Upcoming</p>
+              {schedules.map((s) => {
+                const dt = new Date(s.scheduledAt);
+                return (
+                  <div key={s.id} className="flex items-center gap-3 rounded-lg border border-border bg-secondary px-3 py-2">
+                    <div className="shrink-0 rounded bg-primary/10 px-2 py-1 text-center min-w-[2.75rem]">
+                      <p className="text-[9px] font-bold uppercase text-primary">{dt.toLocaleDateString("en", { month: "short" })}</p>
+                      <p className="text-sm font-bold leading-none text-primary">{dt.getDate()}</p>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="truncate text-sm font-medium">{s.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {dt.toLocaleTimeString("en", { hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                    <button onClick={() => handleDeleteSchedule(s.id)} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors">
+                      <Trash className="h-3.5 w-3.5" />
+                    </button>
                   </div>
-                  <button onClick={() => handleDeleteSchedule(s.id)} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors">
-                    <Trash className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

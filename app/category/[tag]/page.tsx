@@ -88,6 +88,7 @@ export default function CategoryPage({
                 id={stream.id}
                 title={stream.title}
                 streamerName={stream.user.name || stream.user.username}
+                streamerUsername={stream.user.username}
                 streamerAvatar={stream.user.image ?? undefined}
                 viewerCount={stream.viewerCount}
                 tags={stream.tags}

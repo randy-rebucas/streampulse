@@ -8,6 +8,7 @@ interface StreamCardProps {
   id: string;
   title: string;
   streamerName: string;
+  streamerUsername?: string;
   streamerAvatar?: string;
   viewerCount: number;
   tags: string[];
@@ -19,6 +20,7 @@ export function StreamCard({
   id,
   title,
   streamerName,
+  streamerUsername,
   streamerAvatar,
   viewerCount,
   tags,
@@ -62,36 +64,56 @@ export function StreamCard({
         {/* Info */}
         <div className="p-3">
           <div className="flex gap-3">
-            {/* Avatar */}
-            <div className="h-9 w-9 shrink-0 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
-              {streamerAvatar ? (
-                <img
-                  src={streamerAvatar}
-                  alt={streamerName}
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span className="text-sm font-bold text-primary">
-                  {streamerName.charAt(0).toUpperCase()}
-                </span>
-              )}
-            </div>
+            {/* Avatar — links to streamer profile */}
+            {streamerUsername ? (
+              <Link
+                href={`/u/${streamerUsername}`}
+                onClick={(e) => e.stopPropagation()}
+                className="h-9 w-9 shrink-0 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden hover:ring-2 hover:ring-primary/50 transition-all"
+              >
+                {streamerAvatar ? (
+                  <img src={streamerAvatar} alt={streamerName} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-sm font-bold text-primary">{streamerName.charAt(0).toUpperCase()}</span>
+                )}
+              </Link>
+            ) : (
+              <div className="h-9 w-9 shrink-0 rounded-full bg-primary/20 flex items-center justify-center overflow-hidden">
+                {streamerAvatar ? (
+                  <img src={streamerAvatar} alt={streamerName} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-sm font-bold text-primary">{streamerName.charAt(0).toUpperCase()}</span>
+                )}
+              </div>
+            )}
 
             <div className="min-w-0 flex-1">
               <h3 className="truncate text-sm font-semibold text-foreground group-hover:text-primary transition-colors">
                 {title}
               </h3>
-              <p className="text-xs text-muted-foreground">{streamerName}</p>
-              {/* Tags */}
+              {streamerUsername ? (
+                <Link
+                  href={`/u/${streamerUsername}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="text-xs text-muted-foreground hover:text-primary transition-colors"
+                >
+                  {streamerName}
+                </Link>
+              ) : (
+                <p className="text-xs text-muted-foreground">{streamerName}</p>
+              )}
+              {/* Tags — each links to category browse */}
               {tags.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {tags.slice(0, 3).map((tag) => (
-                    <span
+                    <Link
                       key={tag}
-                      className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                      href={`/category/${encodeURIComponent(tag)}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
                     >
                       {tag}
-                    </span>
+                    </Link>
                   ))}
                 </div>
               )}
